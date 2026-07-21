@@ -6,6 +6,13 @@ const entitlementsRoutes = require('./src/routes/entitlements');
 const wayforpayRoutes = require('./src/routes/wayforpay');
 
 const app = express();
+
+// WayForPay doesn't reliably send Content-Type: application/json on its
+// serviceUrl callback, so express.json()'s default (which only parses when
+// that header matches) silently leaves req.body empty. type: () => true
+// forces this route to parse the body as JSON regardless of the header.
+app.use('/webhooks/wayforpay', express.json({ type: () => true }));
+
 app.use(express.json());
 
 app.get('/health', (req, res) => res.json({ ok: true, service: 'tali-core-identity-billing' }));
