@@ -9,6 +9,7 @@ services:
     runtime: node
     plan: free
     region: frankfurt
+    rootDir: tali-core
     buildCommand: npm install
     startCommand: npm start
     envVars:
