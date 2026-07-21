@@ -17,7 +17,11 @@ router.post('/', async (req, res) => {
   }
 
   if (!verifyCallbackSignature(payload, secretKey)) {
+    // TEMP DEBUG (remove once signature matching is confirmed): dump the
+    // exact payload WayForPay sent so we can see real field values/formats
+    // instead of guessing.
     console.warn('WayForPay callback rejected: bad signature', payload.orderReference);
+    console.warn('TEMP DEBUG raw payload:', JSON.stringify(payload));
     return res.status(400).json({ error: 'invalid signature' });
   }
 
