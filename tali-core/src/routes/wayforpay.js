@@ -17,11 +17,7 @@ router.post('/', async (req, res) => {
   }
 
   if (!verifyCallbackSignature(payload, secretKey)) {
-    // TEMP DEBUG (remove once signature matching is confirmed): dump the
-    // exact payload WayForPay sent so we can see real field values/formats
-    // instead of guessing.
     console.warn('WayForPay callback rejected: bad signature', payload.orderReference);
-    console.warn('TEMP DEBUG raw payload:', JSON.stringify(payload));
     return res.status(400).json({ error: 'invalid signature' });
   }
 
@@ -37,11 +33,49 @@ router.post('/', async (req, res) => {
       [payload.orderReference, payload.amount, payload.currency, payload.transactionStatus, payload]
     );
 
-    // TODO (next slice): on transactionStatus === 'Approved', resolve the
-    // paying user via orderReference -> user_id and extend entitlements
-    // (subscription_expires_at, plan, status). Needs orderReference to encode
-    // or map back to a telegram_id/user_id at invoice-creation time — decide
-    // that convention when the invoice-issuing side of WayForPay moves here.
+    // Same orderReference convention n8n already uses today (see
+    // "Code Generate invoice" nodes): sub_<telegram_id>_<timestamp>[_<i>].
+    // telegram_id is the second underscore-separated segment. This is safe
+    // to trust because orderReference is itself covered by the signature we
+    // just verified above — nobody can hand us a forged telegram_id without
+    // also knowing the WayForPay secret.
+    if (payload.transactionStatus === 'Approved') {
+      const segments = String(payload.orderReference || '').split('_');
+      const telegramId = segments[1];
+
+      if (segments[0] === 'sub' && telegramId) {
+        const identity = await client.query(
+          'SELECT user_id FROM identity_links WHERE provider = $1 AND external_id = $2',
+          ['telegram', telegramId]
+        );
+
+        let userId;
+        if (identity.rows.length > 0) {
+          userId = identity.rows[0].user_id;
+        } else {
+          const userRow = await client.query('INSERT INTO users DEFAULT VALUES RETURNING id');
+          userId = userRow.rows[0].id;
+          await client.query(
+            'INSERT INTO identity_links (user_id, provider, external_id) VALUES ($1, $2, $3)',
+            [userId, 'telegram', telegramId]
+          );
+          await client.query('INSERT INTO entitlements (user_id) VALUES ($1)', [userId]);
+        }
+
+        // Extends from whichever is later: now, or the current expiry (so
+        // renewing before the old period ends doesn't lose the remaining days).
+        await client.query(
+          `UPDATE entitlements
+             SET status = 'active',
+                 subscription_expires_at = GREATEST(now(), coalesce(subscription_expires_at, now())) + interval '30 days',
+                 updated_at = now()
+           WHERE user_id = $1`,
+          [userId]
+        );
+      } else {
+        console.warn('Approved payment with unrecognized orderReference format, entitlements not updated:', payload.orderReference);
+      }
+    }
 
     await client.query('COMMIT');
   } catch (err) {
