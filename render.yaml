@@ -1,0 +1,33 @@
+databases:
+  - name: tali-core-db
+    plan: free
+    region: frankfurt
+
+services:
+  # Одна комната на всё: Identity & Billing (готово) + Conversation webhook
+  # (строим сейчас) живут в одном процессе — чтобы не платить $7/мес за
+  # каждый новый кусочек логики отдельно. plan: starter, не free — этому
+  # сервису теперь нужно отвечать в реальном времени на сообщения из
+  # Telegram, а бесплатные веб-сервисы Render засыпают через 15 минут
+  # простоя (30-50 сек на "проснуться" выглядели бы как зависший бот).
+  # Если позже какая-то часть логики реально упрётся в нагрузку — тогда и
+  # только тогда стоит выносить её в отдельный сервис.
+  - type: web
+    name: tali-core-identity-billing
+    runtime: node
+    plan: starter
+    region: frankfurt
+    rootDir: tali-core
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tali-core-db
+          property: connectionString
+      - key: WAYFORPAY_SECRET_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
