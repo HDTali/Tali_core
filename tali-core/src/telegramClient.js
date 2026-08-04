@@ -1,9 +1,91 @@
 // Minimal Telegram Bot API client.
-// The real HTML-sanitizing / message-splitting logic (see "разбивка смс" in
-// n8n) gets ported here in a later step (task 7); onboarding messages are
-// short enough not to need splitting.
+//
+// HTML-sanitizing / message-splitting logic below is a verbatim port of the
+// "разбивка смс" / "Code in JavaScript1" node from n8n (see
+// 02_Промты и код нод/Code in JavaScript1 (чат — с чистилкой звёздочек).js).
+// Originally this was going to wait for task 7 (free chat) on the theory
+// that onboarding messages are short — turned out wrong: the chart-summary
+// text from Claude (~900 words) routinely blows past Telegram's 4096-char
+// limit and 04.08.2026 testing hit exactly that ("Bad Request: message is
+// too long"). Porting it now since it's not free-chat-specific anyway —
+// every sendMessage call benefits from not silently failing on long text.
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const MAX_CHUNK = 3800; // n8n's number — comfortably under Telegram's 4096 hard cap
+
+function stripMarkdown(t) {
+  return t
+    .replace(/\*\*\*(.+?)\*\*\*/g, '<b>$1</b>')
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/\*/g, '')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/^\s*-{3,}\s*$/gm, '')
+    .replace(/`/g, '');
+}
+
+// Escapes stray < / > that aren't part of a Telegram-supported HTML tag, so
+// Claude accidentally writing e.g. "x < y" doesn't break parse_mode: HTML.
+function escapeNonHTML(t) {
+  const validTag = /<\/?(b|i|u|s|code|pre|a)(\s[^>]*)?>|<tg-spoiler>|<\/tg-spoiler>/gi;
+  let result = '';
+  let lastIndex = 0;
+  let match;
+  const re = new RegExp(validTag.source, 'gi');
+  while ((match = re.exec(t)) !== null) {
+    result += t.slice(lastIndex, match.index).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    result += match[0];
+    lastIndex = match.index + match[0].length;
+  }
+  result += t.slice(lastIndex).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return result;
+}
+
+// Closes any <b>/<i> left dangling open — needed per-chunk too, since
+// splitting mid-text can otherwise cut a chunk off inside an open tag.
+function fixTags(t) {
+  const openB = (t.match(/<b>/gi) || []).length;
+  const closeB = (t.match(/<\/b>/gi) || []).length;
+  if (openB > closeB) for (let i = 0; i < openB - closeB; i++) t += '</b>';
+  const openI = (t.match(/<i>/gi) || []).length;
+  const closeI = (t.match(/<\/i>/gi) || []).length;
+  if (openI > closeI) for (let i = 0; i < openI - closeI; i++) t += '</i>';
+  return t;
+}
+
+// Splits on paragraph breaks first (keeps chunks readable), falling back to
+// a hard slice for any single paragraph that's itself over MAX_CHUNK (the
+// n8n node didn't need this fallback because in practice Claude's paragraphs
+// never got that long, but it's a cheap safety net).
+function splitIntoChunks(text) {
+  const cleaned = fixTags(escapeNonHTML(stripMarkdown(text)));
+  const paragraphs = cleaned.split('\n\n');
+  const chunks = [];
+  let current = '';
+
+  for (const p of paragraphs) {
+    const candidate = current ? current + '\n\n' + p : p;
+    if (candidate.length > MAX_CHUNK && current) {
+      chunks.push(fixTags(current.trim()));
+      current = p;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) chunks.push(fixTags(current.trim()));
+
+  const final = [];
+  for (const c of chunks) {
+    if (c.length <= MAX_CHUNK) {
+      final.push(c);
+    } else {
+      for (let i = 0; i < c.length; i += MAX_CHUNK) {
+        final.push(fixTags(c.slice(i, i + MAX_CHUNK)));
+      }
+    }
+  }
+  return final.length > 0 ? final : [''];
+}
 
 async function callTelegram(method, body) {
   const res = await fetch(`https://api.telegram.org/bot${TOKEN}/${method}`, {
@@ -20,12 +102,22 @@ async function callTelegram(method, body) {
 // options.buttons: array of rows, each row an array of { text, callback_data }
 // e.g. [[{ text: '👩 Женский', callback_data: 'gender_female' }], [{ text: '👨 Мужской', callback_data: 'gender_male' }]]
 // matches the one-button-per-row layout used by the "Gender" node in n8n.
+//
+// Long text is split into multiple Telegram messages (see splitIntoChunks
+// above); buttons, if any, are attached only to the last chunk.
 async function sendMessage(chatId, text, options = {}) {
-  const body = { chat_id: chatId, text, parse_mode: 'HTML' };
-  if (options.buttons) {
-    body.reply_markup = { inline_keyboard: options.buttons };
+  const chunks = splitIntoChunks(text || '');
+  let allOk = true;
+  for (let i = 0; i < chunks.length; i++) {
+    const isLast = i === chunks.length - 1;
+    const body = { chat_id: chatId, text: chunks[i], parse_mode: 'HTML' };
+    if (isLast && options.buttons) {
+      body.reply_markup = { inline_keyboard: options.buttons };
+    }
+    const ok = await callTelegram('sendMessage', body);
+    allOk = allOk && ok;
   }
-  return callTelegram('sendMessage', body);
+  return allOk;
 }
 
 async function sendPhoto(chatId, photoUrlOrFileId, caption) {
