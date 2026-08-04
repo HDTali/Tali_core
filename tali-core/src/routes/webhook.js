@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
 const { resolveIdentity } = require('../identityCore');
-const { sendMessage } = require('../telegramClient');
+const { sendMessage, answerCallbackQuery } = require('../telegramClient');
+const { getOrCreateProfile, isOnboardingState, handleOnboarding } = require('../onboarding');
 
 // Telegram echoes back whatever secret_token you set when registering the
 // webhook, on this exact header, on every single request. Checking it means
@@ -21,33 +22,40 @@ router.post('/telegram', verifyTelegramSecret, async (req, res) => {
   const update = req.body || {};
 
   try {
+    let telegramId, chatId, text, callbackData, callbackQueryId;
+
     if (update.message && update.message.from) {
-      const telegramId = update.message.from.id;
-      const chatId = update.message.chat.id;
-      const text = update.message.text || '(не текст)';
-
-      const { user_id, created } = await resolveIdentity('telegram', telegramId);
-      const { rows } = await pool.query('SELECT * FROM entitlements WHERE user_id = $1', [
-        user_id,
-      ]);
-      const entitlements = rows[0] || {};
-
-      // Diagnostic-only reply for now — proves Telegram -> this route ->
-      // identityCore -> Postgres -> Telegram works end to end, all inside
-      // the same already-deployed service (no second Render service, no
-      // extra $/month — see README for why).
-      // Real onboarding/paywall/RAG/Claude logic replaces this in the next steps.
-      await sendMessage(
-        chatId,
-        `Скелет диалога на связи.\n\n` +
-          `Твой текст: "${text}"\n` +
-          `internal user_id: ${user_id} (${created ? 'новый' : 'уже существовал'})\n` +
-          `План: ${entitlements.plan}, бесплатных использовано: ${entitlements.questions_used}/${entitlements.questions_limit}, в этом месяце: ${entitlements.monthly_used}/${entitlements.monthly_limit}`
-      );
+      telegramId = update.message.from.id;
+      chatId = update.message.chat.id;
+      text = update.message.text || '';
     } else if (update.callback_query) {
-      // Кнопки тем — подключим в шаге "перенести onboarding/RAG".
-      console.log('callback_query received, not handled yet:', update.callback_query.data);
+      telegramId = update.callback_query.from.id;
+      chatId = update.callback_query.message.chat.id;
+      callbackData = update.callback_query.data;
+      callbackQueryId = update.callback_query.id;
+      await answerCallbackQuery(callbackQueryId);
+    } else {
+      return res.status(200).json({ ok: true }); // nothing we handle yet
     }
+
+    const { user_id } = await resolveIdentity('telegram', telegramId);
+    const profile = await getOrCreateProfile(user_id);
+
+    if (isOnboardingState(profile.state)) {
+      await handleOnboarding({ userId: user_id, chatId, profile, text, callbackData });
+      return res.status(200).json({ ok: true });
+    }
+
+    // Onboarding is done (state = chart_ready or beyond) — real free-chat /
+    // topics / paywall / RAG / Claude logic is tasks 4-7, not built yet.
+    // Diagnostic reply only, same as the original skeleton.
+    const { rows } = await pool.query('SELECT * FROM entitlements WHERE user_id = $1', [user_id]);
+    const entitlements = rows[0] || {};
+    await sendMessage(
+      chatId,
+      `Онбординг пройден (state: ${profile.state}). Свободный чат/темы ещё не перенесены.\n` +
+        `Бесплатных использовано: ${entitlements.questions_used}/${entitlements.questions_limit}, в этом месяце: ${entitlements.monthly_used}/${entitlements.monthly_limit}`
+    );
 
     res.status(200).json({ ok: true });
   } catch (err) {
