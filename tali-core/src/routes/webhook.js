@@ -14,12 +14,22 @@ function verifyTelegramSecret(req, res, next) {
   const expected = process.env.TELEGRAM_WEBHOOK_SECRET;
   if (!expected) return next(); // not configured yet — skip during early testing
   const got = req.get('x-telegram-bot-api-secret-token');
-  if (got !== expected) return res.status(401).json({ error: 'bad secret token' });
+  if (got !== expected) {
+    // TEMP DEBUG (04.08.2026, remove once onboarding testing is confirmed
+    // working): requests were silently going nowhere and nothing showed up
+    // in Render logs, so we couldn't tell if Telegram was even reaching us.
+    console.error('[webhook] rejected: bad/missing secret token header, got:', got);
+    return res.status(401).json({ error: 'bad secret token' });
+  }
   next();
 }
 
 router.post('/telegram', verifyTelegramSecret, async (req, res) => {
   const update = req.body || {};
+  // TEMP DEBUG (04.08.2026, remove once onboarding testing is confirmed
+  // working) — log every incoming update so we can see in Render logs
+  // whether Telegram is reaching us at all, and with what.
+  console.log('[webhook] incoming update:', JSON.stringify(update));
 
   try {
     let telegramId, chatId, text, callbackData, callbackQueryId;
@@ -33,16 +43,21 @@ router.post('/telegram', verifyTelegramSecret, async (req, res) => {
       chatId = update.callback_query.message.chat.id;
       callbackData = update.callback_query.data;
       callbackQueryId = update.callback_query.id;
+      console.log('[webhook] callback_query branch, callbackData:', callbackData);
       await answerCallbackQuery(callbackQueryId);
+      console.log('[webhook] answerCallbackQuery done');
     } else {
+      console.log('[webhook] update type not handled, ignoring');
       return res.status(200).json({ ok: true }); // nothing we handle yet
     }
 
     const { user_id } = await resolveIdentity('telegram', telegramId);
     const profile = await getOrCreateProfile(user_id);
+    console.log('[webhook] resolved user_id:', user_id, 'profile.state:', profile.state);
 
     if (isOnboardingState(profile.state)) {
       await handleOnboarding({ userId: user_id, chatId, profile, text, callbackData });
+      console.log('[webhook] handleOnboarding done');
       return res.status(200).json({ ok: true });
     }
 
