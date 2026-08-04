@@ -25,7 +25,7 @@ create table if not exists entitlements (
   plan text not null default 'free',
   status text not null default 'active',
   questions_used int not null default 0,
-  questions_limit int not null default 3,
+  questions_limit int not null default 5,
   subscription_expires_at timestamptz,
   updated_at timestamptz not null default now()
 );
@@ -36,6 +36,17 @@ create table if not exists entitlements (
 -- above, which is the free tier's one-time lifetime allowance and never resets.
 alter table entitlements add column if not exists monthly_used int not null default 0;
 alter table entitlements add column if not exists monthly_limit int not null default 150;
+
+-- questions_limit default bumped 3 -> 5. The "create table if not exists"
+-- above only applies to a brand-new database — since entitlements already
+-- exists in yours, that line is silently skipped and the old default (3)
+-- would stick around without this explicit alter.
+alter table entitlements alter column questions_limit set default 5;
+
+-- monthly_limit corrected 150 -> 120, matching the real number confirmed
+-- 04.08.2026 (this file previously had the wrong figure). Same reasoning as
+-- above: explicit alter needed so it actually takes effect on your database.
+alter table entitlements alter column monthly_limit set default 120;
 
 -- Single payments ledger, replacing WayForPay logic duplicated in three places.
 create table if not exists payments (
