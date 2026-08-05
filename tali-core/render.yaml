@@ -35,3 +35,5 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: WELCOME_VIDEO_NOTE_FILE_ID
+        sync: false
