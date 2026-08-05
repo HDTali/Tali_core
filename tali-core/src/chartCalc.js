@@ -92,6 +92,44 @@ async function callThdApi(birthDateDDMMYYYY, birthTimeHHMM, translatedCity) {
   return json; // { data: { chart: {...}, ... } }
 }
 
+// Compact "passport" of the chart — built for future Claude free-chat
+// prompts (task 7) so we don't have to feed the entire raw THD payload into
+// every message. Field names verified against the real bodygraph-rendering
+// code (Humdesign key/bodygraph-service/bodygraph.js — generateBodygraph()
+// reads data.centers.defined, data.gates.{personalityGates,designGates},
+// data.activations.{design,personality}, data.chart, data.variable), not
+// guessed — same source that told us the multipart photo needed fixing.
+function buildChartCompact(thdData) {
+  const chart = thdData.chart || {};
+  const centers = thdData.centers || {};
+  const gates = thdData.gates || {};
+  const variable = thdData.variable || {};
+  const personalityGates = gates.personalityGates || [];
+  const designGates = gates.designGates || [];
+
+  return {
+    type: chart.type,
+    strategy: chart.strategy,
+    authority: chart.authority,
+    profile: chart.profile,
+    profileName: chart.profileName,
+    signature: chart.signature,
+    notSelfTheme: chart.notSelfTheme,
+    definition: chart.definition,
+    incarnationCross: chart.incarnationCross,
+    definedCenters: centers.defined || [],
+    // Merged, de-duplicated, sorted — enough for "is gate N active" checks
+    // in a system prompt without needing the full per-planet activation list.
+    activeGates: Array.from(new Set([...personalityGates, ...designGates])).sort((a, b) => a - b),
+    variables: {
+      designDigestion: variable.designDigestion,
+      designEnvironment: variable.designEnvironment,
+      personalityMotivation: variable.personalityMotivation,
+      personalityPerspective: variable.personalityPerspective,
+    },
+  };
+}
+
 // Returns the chart image as a Buffer (n8n's node used responseFormat: 'file').
 async function callBodygraph(thdData) {
   const res = await fetch('https://tali-bodygraph.onrender.com/bodygraph', {
@@ -178,4 +216,4 @@ async function generateChartSummary({ displayName, lang, chart }) {
   return json.content[0].text;
 }
 
-module.exports = { translateCity, callThdApi, callBodygraph, generateChartSummary };
+module.exports = { translateCity, callThdApi, callBodygraph, buildChartCompact, generateChartSummary };

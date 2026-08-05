@@ -3,19 +3,34 @@
 // Date / Waiting time / Waiting Location / Расчет карты nodes. Text and
 // validation copied verbatim from the real workflow.
 //
+// Language selection (05.08.2026) — ported from a FRESH export
+// ("ТАЛИ main (5).json", supplied by Наталия 05.08.2026) after discovering
+// the older export this file was originally built from didn't have these
+// nodes at all (production had moved on since that export was taken — same
+// lesson as the 14.9 EUR vs 770 UAH price mismatch earlier). Real flow,
+// verified against the actual nodes ("Видео приветствие", "Выбор языка",
+// "Привет старт"):
+//   new → video note (WELCOME_VIDEO_NOTE_FILE_ID, best-effort — see
+//         sendVideoNote in telegramClient.js re: file_id being bot-scoped)
+//       → waiting_language (buttons lang_ua/lang_ru, sets profile.lang)
+//       → waiting_start_confirm (bilingual "пара слов" text + one button,
+//         callback_data "start_onboarding" — does NOT auto-advance)
+//       → waiting_name → ...rest unchanged
+//
 // NOT yet ported (separate follow-up, out of scope for this pass):
-//  - language selection buttons (Выбор языка / Язык выбран? / Update lang) —
-//    `lang` defaults to 'ru' here; switching is a later step.
+//  - "Язык выбран?" branch for switching language later from the menu
+//    (existing subscriber, not part of first-time onboarding) — see
+//    "Локализация 7" doc; only the first-time-registration path is built here.
 //  - waiting_full_name / PDF-report side flow — separate from core onboarding.
-//  - the welcome video + intro text drafted in "Приветствие_и_видео_кружок.md"
-//    — not wired in yet, still needs a decision on how the video note is sent.
 
 const { pool } = require('./db');
-const { sendMessage, sendPhotoBuffer } = require('./telegramClient');
-const { translateCity, callThdApi, callBodygraph, generateChartSummary } = require('./chartCalc');
+const { sendMessage, sendPhotoBuffer, sendVideoNote } = require('./telegramClient');
+const { translateCity, callThdApi, callBodygraph, buildChartCompact, generateChartSummary } = require('./chartCalc');
 
 const ONBOARDING_STATES = [
   'new',
+  'waiting_language',
+  'waiting_start_confirm',
   'waiting_name',
   'waiting_gender',
   'waiting_date',
@@ -64,8 +79,79 @@ async function handleOnboarding({ userId, chatId, profile, text, callbackData })
 
   if (!isOnboardingState(state)) return false;
 
-  // Brand new profile — first contact. Ask for name, matching the "Имя" node.
+  // Brand new profile — first contact. Matches "Видео приветствие" →
+  // "Выбор языка": video note first (best-effort — see sendVideoNote), then
+  // the language screen (exact text/buttons from a real export, not
+  // reworded — this screen is itself bilingual-in-one-message, shown before
+  // we know the person's language).
   if (state === 'new') {
+    await setProfile(userId, { state: 'waiting_language' });
+    try {
+      await sendVideoNote(chatId);
+    } catch (videoErr) {
+      console.error('sendVideoNote failed, continuing without it', videoErr);
+    }
+    await sendMessage(
+      chatId,
+      '🇺🇦 Обери, якою мовою тобі зручніше спілкуватися:\n\n' +
+        'Выбери, на каком языке тебе удобнее общаться:',
+      {
+        buttons: [
+          [{ text: '🇺🇦 Українська', callback_data: 'lang_ua' }],
+          [{ text: 'Русский', callback_data: 'lang_ru' }],
+        ],
+      }
+    );
+    return true;
+  }
+
+  if (state === 'waiting_language') {
+    if (callbackData !== 'lang_ua' && callbackData !== 'lang_ru') {
+      // Not a button click — re-show the same bilingual prompt rather than
+      // guess a language to reply in.
+      await sendMessage(
+        chatId,
+        '🇺🇦 Обери, якою мовою тобі зручніше спілкуватися:\n\n' +
+          'Выбери, на каком языке тебе удобнее общаться:',
+        {
+          buttons: [
+            [{ text: '🇺🇦 Українська', callback_data: 'lang_ua' }],
+            [{ text: 'Русский', callback_data: 'lang_ru' }],
+          ],
+        }
+      );
+      return true;
+    }
+    const chosenLang = callbackData === 'lang_ua' ? 'ua' : 'ru';
+    await setProfile(userId, { lang: chosenLang, state: 'waiting_start_confirm' });
+    // Matches "Привет старт": bilingual "пара слов" text + single button
+    // (callback_data "start_onboarding") — the person must tap it, this
+    // step does not auto-advance to the name question.
+    await sendMessage(
+      chatId,
+      t(
+        chosenLang,
+        `Пара слов, прежде чем начнём.\n\nСо мной можно говорить двумя способами: жать кнопки тем внизу — или просто писать текстом что угодно, своими словами. После ответа по теме, если захочешь пойти глубже, ответь на мой вопрос или напиши «расскажи подробнее».\n\nТы можешь рассказать мне о своей ситуации, мыслях, которые беспокоят, о решении, в котором сомневаешься — я помогу разобраться, опираясь на твой Дизайн.\n\nИли напиши свой вопрос.\nНапример: «расскажи про мой талант», «как мне лучше проявляться», «почему я так устаю от людей».\n\nНа старте у тебя есть 5 бесплатных вопросов — на пробу обоих способов.\n\nА теперь давай знакомиться.`,
+        `Кілька слів, перш ніж почнемо.\n\nЗі мною можна спілкуватися двома способами: тиснути кнопки тем унизу — або просто писати текстом що завгодно, своїми словами. Після відповіді за темою, якщо захочеш піти глибше, дай відповідь на моє запитання або напиши «розкажи детальніше».\n\nТи можеш розповісти мені про свою ситуацію, думки, які турбують, про рішення, у якому сумніваєшся — я допоможу розібратися, спираючись на твій Дизайн.\n\nАбо напиши своє запитання.\nНаприклад: «розкажи про мій талант», «як мені краще проявлятися», «чому я так втомлююся від людей».\n\nНа старті в тебе є 5 безкоштовних запитань — спробувати обидва способи.\n\nА тепер давай знайомитися.`
+      ),
+      {
+        buttons: [
+          [{ text: t(chosenLang, 'Привет, давай начнем', 'Привіт, давай почнемо'), callback_data: 'start_onboarding' }],
+        ],
+      }
+    );
+    return true;
+  }
+
+  if (state === 'waiting_start_confirm') {
+    if (callbackData !== 'start_onboarding') {
+      // Nudge toward the button rather than silently ignore free text here.
+      await sendMessage(
+        chatId,
+        t(lang, `Нажми на кнопку выше, чтобы начать 🕊`, `Натисни кнопку вище, щоб почати 🕊`)
+      );
+      return true;
+    }
     await setProfile(userId, { state: 'waiting_name' });
     await sendMessage(
       chatId,
@@ -246,7 +332,7 @@ async function runChartCalculation({ userId, chatId, profile, lang }) {
     await setProfile(userId, {
       state: 'chart_ready',
       chart_data: JSON.stringify(chart),
-      chart_compact: null, // TODO(task 6): build the compact "passport" shape once bodygraph's response fields are confirmed
+      chart_compact: JSON.stringify(buildChartCompact(thd.data)),
       memory_summary: profile.memory_summary,
     });
 
