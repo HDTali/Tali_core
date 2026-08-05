@@ -2,6 +2,20 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
 const { verifyCallbackSignature, signResponse } = require('../wayforpaySignature');
+const { sendMessage } = require('../telegramClient');
+const { getOrCreateProfile } = require('../onboarding');
+
+// "Подписка активирована" — ported verbatim from the real n8n node
+// "Send a text message" in the "Way for pay (fixed v2)" workflow, the one
+// that fires right after Update record sets subscription_status: active.
+// RU confirmed live in the JSON export; UA confirmed from
+// "Локализация 6 — вспомогательные воркфлоу (укр+рус).md" (same node,
+// documented UA variant). No buttons on this message in the real workflow.
+function activationMessage(lang) {
+  return lang === 'ua'
+    ? `🎉 Підписку активовано!\n\nТепер тобі доступні всі матеріали за твоїм дизайном.\n\nНатискай кнопку «Меню», щоб обрати тему, в яку хочеш зануритися.\n\nА ще пам'ятай — я відповідаю на питання в чат, або можеш надіслати голосове не більше 60 сек. 💜`
+    : `🎉 Подписка активирована!\n\nТеперь тебе доступны все материалы по твоему дизайну.\n\nНажимай кнопку «Меню», чтобы выбрать тему, в которую хочешь погрузиться.\n\nА ещё помни — я отвечаю на вопросы в чат или можешь отправить голосовое не более 60 сек. 💜`;
+}
 
 // This endpoint is meant to replace the "Way for pay" n8n webhook node.
 // Fixes audit findings #0 (no signature check at all) and #3 (secret
@@ -20,6 +34,13 @@ router.post('/', async (req, res) => {
     console.warn('WayForPay callback rejected: bad signature', payload.orderReference);
     return res.status(400).json({ error: 'invalid signature' });
   }
+
+  // Captured inside the try block below (only set when this is an Approved
+  // subscription payment) so we can send the activation message AFTER the
+  // transaction commits — never send a "you're subscribed" message before
+  // the DB write that actually makes it true has landed.
+  let activatedTelegramId = null;
+  let activatedUserId = null;
 
   const client = await pool.connect();
   try {
@@ -72,6 +93,9 @@ router.post('/', async (req, res) => {
            WHERE user_id = $1`,
           [userId]
         );
+
+        activatedTelegramId = telegramId;
+        activatedUserId = userId;
       } else {
         console.warn('Approved payment with unrecognized orderReference format, entitlements not updated:', payload.orderReference);
       }
@@ -84,6 +108,20 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ error: 'processing failed' });
   } finally {
     client.release();
+  }
+
+  // Real bot's "🎉 Подписка активирована!" message — chatId is the same as
+  // telegramId here because this is always a private 1-on-1 chat with the
+  // bot (same assumption the real n8n node makes). Best-effort: a failure
+  // here must not affect the response we owe WayForPay below (it already
+  // has its money and the DB write already committed).
+  if (activatedTelegramId && activatedUserId) {
+    try {
+      const profile = await getOrCreateProfile(activatedUserId);
+      await sendMessage(activatedTelegramId, activationMessage(profile.lang || 'ru'));
+    } catch (err) {
+      console.error('failed to send activation message', err);
+    }
   }
 
   const time = Math.floor(Date.now() / 1000);

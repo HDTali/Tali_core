@@ -61,12 +61,38 @@ router.post('/telegram', verifyTelegramSecret, async (req, res) => {
       return res.status(200).json({ ok: true });
     }
 
-    // Onboarding is done (state = chart_ready or beyond). Paywall gate (шаг 5)
-    // is real now; the actual free-chat/topics/RAG/Claude answer (шаг 6-7)
-    // isn't built yet, so an allowed message still gets a diagnostic reply
-    // instead of a real answer — but the gate itself, the counters, and the
-    // upsell/renewal messages are the genuine ported logic, not placeholders.
+    // Onboarding is done (state = chart_ready or beyond).
     const lang = profile.lang || 'ru';
+
+    // 05.08.2026: found live — every button tap (menu navigation, "tell me
+    // more about the subscription", etc.) was burning a real question from
+    // the paywall counter, same as typing an actual question. That's wrong:
+    // browsing screens isn't "asking Tali something". Until topics/RAG (шаг
+    // 6) are built with a real notion of "this button click delivers a
+    // paid answer", NO callback_query counts towards the limit here — only
+    // free-text messages do. Known non-content buttons from the paywall
+    // messages get a lightweight stub reply; any other callback_data
+    // post-onboarding (nothing exists yet — future topic menus land here)
+    // is just acknowledged, not charged.
+    if (callbackData) {
+      const NON_CONTENT_CALLBACKS = new Set(['subscription_details', 'natali_services']);
+      if (NON_CONTENT_CALLBACKS.has(callbackData)) {
+        await sendMessage(
+          chatId,
+          lang === 'ua'
+            ? 'Цей розділ ще будується 🕊 Скоро тут буде більше деталей.'
+            : 'Этот раздел ещё строится 🕊 Скоро здесь будет больше деталей.'
+        );
+      } else {
+        console.log('[webhook] unhandled post-onboarding callback_data (not charged):', callbackData);
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    // Paywall gate (шаг 5) is real now; the actual free-chat/topics/RAG/Claude
+    // answer (шаг 6-7) isn't built yet, so an allowed message still gets a
+    // diagnostic reply instead of a real answer — but the gate itself, the
+    // counters, and the upsell/renewal messages are the genuine ported logic.
     const gate = await checkGate(user_id);
 
     if (!gate.allowed) {
@@ -81,8 +107,11 @@ router.post('/telegram', verifyTelegramSecret, async (req, res) => {
     const entitlements = await incrementUsage(user_id);
     await sendMessage(
       chatId,
-      `Онбординг пройден (state: ${profile.state}). Свободный чат/темы ещё не перенесены.\n` +
-        `Бесплатных использовано: ${entitlements.questions_used}/${entitlements.questions_limit}, в этом месяце: ${entitlements.monthly_used}/${entitlements.monthly_limit}`
+      lang === 'ua'
+        ? `Онбординг пройдено (state: ${profile.state}). Вільний чат/теми ще не перенесені.\n` +
+          `Безкоштовних використано: ${entitlements.questions_used}/${entitlements.questions_limit}, цього місяця: ${entitlements.monthly_used}/${entitlements.monthly_limit}`
+        : `Онбординг пройден (state: ${profile.state}). Свободный чат/темы ещё не перенесены.\n` +
+          `Бесплатных использовано: ${entitlements.questions_used}/${entitlements.questions_limit}, в этом месяце: ${entitlements.monthly_used}/${entitlements.monthly_limit}`
     );
 
     res.status(200).json({ ok: true });
