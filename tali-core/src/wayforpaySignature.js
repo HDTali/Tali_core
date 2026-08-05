@@ -34,4 +34,30 @@ function signResponse(orderReference, status, time, secretKey) {
   return crypto.createHmac('md5', secretKey).update(base, 'utf8').digest('hex');
 }
 
-module.exports = { verifyCallbackSignature, signResponse };
+/**
+ * CREATE_INVOICE request signature — covers:
+ *   merchantAccount;merchantDomainName;orderReference;orderDate;amount;
+ *   currency;productName;productCount;productPrice
+ * Verified against the real n8n node ("Way for pay code (тестировщики —
+ * цикл по всем).js") that generates today's subscription invoice links —
+ * same field order, same HMAC-MD5 algorithm as the callback signature above.
+ */
+function signInvoiceRequest(
+  { merchantAccount, merchantDomainName, orderReference, orderDate, amount, currency, productName, productCount, productPrice },
+  secretKey
+) {
+  const base = [
+    merchantAccount,
+    merchantDomainName,
+    orderReference,
+    orderDate,
+    amount,
+    currency,
+    productName,
+    productCount,
+    productPrice,
+  ].join(';');
+  return crypto.createHmac('md5', secretKey).update(base, 'utf8').digest('hex');
+}
+
+module.exports = { verifyCallbackSignature, signResponse, signInvoiceRequest };
