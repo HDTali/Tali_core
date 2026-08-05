@@ -76,13 +76,21 @@ create table if not exists profiles (
   birth_time text,
   birth_location text,
   lang text not null default 'ru',
-  chart_data jsonb,      -- raw bodygraph-service response
+  chart_data jsonb,      -- thd.data.chart only (small subset, used for the onboarding summary text)
   chart_compact jsonb,   -- compact "passport" fed into the Claude system prompt
   memory_summary text,   -- Haiku-compressed memory, updated after each free-chat turn
   last_topic text,
   last_topic_label text,
   updated_at timestamptz not null default now()
 );
+
+-- Full raw THD API response — matches n8n's separate `chart_data_full`
+-- Airtable field (distinct from the small `chart_data`/`chart` subset).
+-- Added 05.08.2026 after finding the real "паспорт карты" node
+-- (Code JavaScript7) rebuilds chart_compact FROM chart_data_full, not from
+-- chart_data — without storing the full response, chart_compact could never
+-- be rebuilt later (bug fix, schema change) without a paid THD API recalc.
+alter table profiles add column if not exists chart_data_full jsonb;
 
 -- Free-chat message history — the context window sent to Claude on each turn.
 create table if not exists messages (
