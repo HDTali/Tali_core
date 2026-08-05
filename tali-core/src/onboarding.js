@@ -11,7 +11,7 @@
 //    — not wired in yet, still needs a decision on how the video note is sent.
 
 const { pool } = require('./db');
-const { sendMessage, sendPhoto } = require('./telegramClient');
+const { sendMessage, sendPhotoBuffer } = require('./telegramClient');
 const { translateCity, callThdApi, callBodygraph, generateChartSummary } = require('./chartCalc');
 
 const ONBOARDING_STATES = [
@@ -223,9 +223,13 @@ async function runChartCalculation({ userId, chatId, profile, lang }) {
       console.error('bodygraph render failed, continuing without image', bgErr);
     }
     if (photoBuffer) {
-      // NOTE: sendPhoto() currently expects a URL/file_id, not a raw Buffer —
-      // wiring up multipart upload for the bodygraph image is a follow-up
-      // (see progress notes). Not blocking chart summary generation below.
+      // Matches n8n's "Send a photo message" node: sent right after the
+      // bodygraph render, no caption, before the Claude text summary below.
+      try {
+        await sendPhotoBuffer(chatId, photoBuffer);
+      } catch (photoErr) {
+        console.error('sendPhotoBuffer failed, continuing without image', photoErr);
+      }
     }
 
     await sendMessage(

@@ -129,10 +129,34 @@ async function sendPhoto(chatId, photoUrlOrFileId, caption) {
   return callTelegram('sendPhoto', body);
 }
 
+// Sends raw image bytes (a Buffer) as a photo — for cases like the bodygraph
+// render, which comes back from tali-bodygraph as bytes, not a hosted URL or
+// a Telegram file_id, so the JSON-body sendPhoto() above can't be used.
+// Matches n8n's "Send a photo message" node (binaryData: true, no caption).
+// Needs multipart/form-data, not JSON — uses the Node 18+ global
+// FormData/Blob (same runtime that already gives us global fetch elsewhere).
+async function sendPhotoBuffer(chatId, buffer, caption) {
+  const form = new FormData();
+  form.append('chat_id', String(chatId));
+  form.append('photo', new Blob([buffer], { type: 'image/png' }), 'bodygraph.png');
+  if (caption) {
+    form.append('caption', caption);
+    form.append('parse_mode', 'HTML');
+  }
+  const res = await fetch(`https://api.telegram.org/bot${TOKEN}/sendPhoto`, {
+    method: 'POST',
+    body: form, // no content-type header — fetch sets the multipart boundary itself
+  });
+  if (!res.ok) {
+    console.error('telegram sendPhoto (buffer) failed', res.status, await res.text());
+  }
+  return res.ok;
+}
+
 // Telegram shows a loading spinner on an inline button until this is called —
 // matches the "Answer Callback Query" node in n8n.
 async function answerCallbackQuery(callbackQueryId) {
   return callTelegram('answerCallbackQuery', { callback_query_id: callbackQueryId });
 }
 
-module.exports = { sendMessage, sendPhoto, answerCallbackQuery };
+module.exports = { sendMessage, sendPhoto, sendPhotoBuffer, answerCallbackQuery };
