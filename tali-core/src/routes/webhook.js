@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../db');
 const { resolveIdentity } = require('../identityCore');
 const { sendMessage, answerCallbackQuery } = require('../telegramClient');
 const { getOrCreateProfile, isOnboardingState, handleOnboarding } = require('../onboarding');
+const { checkGate, incrementUsage, monthlyLimitMessage, finalOfferMessage } = require('../paywall');
 
 // Telegram echoes back whatever secret_token you set when registering the
 // webhook, on this exact header, on every single request. Checking it means
@@ -61,11 +61,24 @@ router.post('/telegram', verifyTelegramSecret, async (req, res) => {
       return res.status(200).json({ ok: true });
     }
 
-    // Onboarding is done (state = chart_ready or beyond) — real free-chat /
-    // topics / paywall / RAG / Claude logic is tasks 4-7, not built yet.
-    // Diagnostic reply only, same as the original skeleton.
-    const { rows } = await pool.query('SELECT * FROM entitlements WHERE user_id = $1', [user_id]);
-    const entitlements = rows[0] || {};
+    // Onboarding is done (state = chart_ready or beyond). Paywall gate (шаг 5)
+    // is real now; the actual free-chat/topics/RAG/Claude answer (шаг 6-7)
+    // isn't built yet, so an allowed message still gets a diagnostic reply
+    // instead of a real answer — but the gate itself, the counters, and the
+    // upsell/renewal messages are the genuine ported logic, not placeholders.
+    const lang = profile.lang || 'ru';
+    const gate = await checkGate(user_id);
+
+    if (!gate.allowed) {
+      const offer =
+        gate.reason === 'monthly_limit'
+          ? monthlyLimitMessage(lang)
+          : await finalOfferMessage(lang, telegramId);
+      await sendMessage(chatId, offer.text, { buttons: offer.buttons });
+      return res.status(200).json({ ok: true });
+    }
+
+    const entitlements = await incrementUsage(user_id);
     await sendMessage(
       chatId,
       `Онбординг пройден (state: ${profile.state}). Свободный чат/темы ещё не перенесены.\n` +
