@@ -92,42 +92,157 @@ async function callThdApi(birthDateDDMMYYYY, birthTimeHHMM, translatedCity) {
   return json; // { data: { chart: {...}, ... } }
 }
 
-// Compact "passport" of the chart — built for future Claude free-chat
-// prompts (task 7) so we don't have to feed the entire raw THD payload into
-// every message. Field names verified against the real bodygraph-rendering
-// code (Humdesign key/bodygraph-service/bodygraph.js — generateBodygraph()
-// reads data.centers.defined, data.gates.{personalityGates,designGates},
-// data.activations.{design,personality}, data.chart, data.variable), not
-// guessed — same source that told us the multipart photo needed fixing.
+// Compact "passport" of the chart — verbatim port of the real n8n node
+// "Code JavaScript7 (паспорт + ориентации)" (Humdesign key/02_Промты и код
+// нод/), updated there 4 июля 2026. Field names below are NOT guessed — this
+// replaces an earlier 05.08.2026 attempt that guessed field names from the
+// bodygraph-rendering code instead, which turned out to read a DIFFERENT
+// subset of the same THD response (gates/activations/variable, for drawing
+// the image) than what the real passport builder reads (channels/phs/
+// ravePsychology/planets, for the text prompt) — same object, different
+// keys, verify against the actual consumer next time, not an adjacent one.
+//
+// thdData here is the FULL raw THD API response (n8n's `chart_data_full`),
+// not just thdData.chart.
 function buildChartCompact(thdData) {
-  const chart = thdData.chart || {};
-  const centers = thdData.centers || {};
-  const gates = thdData.gates || {};
-  const variable = thdData.variable || {};
-  const personalityGates = gates.personalityGates || [];
-  const designGates = gates.designGates || [];
+  const d = thdData || {};
+  const chart = d.chart || {};
+  const centers = d.centers || {};
+  const phs = d.phs || {};
+  const ravePsychology = d.ravePsychology || {};
 
   return {
     type: chart.type,
     strategy: chart.strategy,
     authority: chart.authority,
-    profile: chart.profile,
-    profileName: chart.profileName,
-    signature: chart.signature,
-    notSelfTheme: chart.notSelfTheme,
+    profile: `${chart.profile || ''} ${chart.profileName || ''}`,
+    cross: chart.incarnationCross,
     definition: chart.definition,
-    incarnationCross: chart.incarnationCross,
-    definedCenters: centers.defined || [],
-    // Merged, de-duplicated, sorted — enough for "is gate N active" checks
-    // in a system prompt without needing the full per-planet activation list.
-    activeGates: Array.from(new Set([...personalityGates, ...designGates])).sort((a, b) => a - b),
-    variables: {
-      designDigestion: variable.designDigestion,
-      designEnvironment: variable.designEnvironment,
-      personalityMotivation: variable.personalityMotivation,
-      personalityPerspective: variable.personalityPerspective,
-    },
+    signature: chart.signature,
+    notSelf: chart.notSelfTheme,
+    centers_defined: centers.defined || [],
+    centers_open: centers.open || [],
+    channels: (d.channels || []).map((c) => ({ id: c.id, name: c.name })),
+    digestion: phs.digestion,
+    digestionOrientation: phs.digestionOrientation,
+    environment: phs.environment,
+    environmentOrientation: phs.environmentOrientation,
+    motivation: ravePsychology.motivation,
+    motivationOrientation: ravePsychology.motivationOrientation,
+    perspective: ravePsychology.perspective,
+    perspectiveOrientation: ravePsychology.perspectiveOrientation,
+    planets: (d.planets || []).map((p) => ({ planet: p.planet, type: p.type, gate: p.gate, line: p.line })),
   };
+}
+
+// Translation tables + Russian/Ukrainian "паспорт карты" text block fed
+// into the free-chat Claude system prompt — verbatim port of the same real
+// node as buildChartCompact above. Not wired into any route yet (that's
+// task 7, the free-chat Claude calls) — built now while the source was
+// already open, so task 7 doesn't need to re-dig through the n8n export.
+const T_TYPE = {
+  Generator: 'Генератор',
+  'Manifesting Generator': 'Манифестирующий Генератор',
+  Projector: 'Проектор',
+  Manifestor: 'Манифестор',
+  Reflector: 'Рефлектор',
+};
+const T_AUTH = {
+  Emotional: 'Эмоциональный',
+  Sacral: 'Сакральный',
+  Splenic: 'Селезёночный',
+  Ego: 'Эго',
+  'Self-Projected': 'Самопроецируемый',
+  Mental: 'Ментальный',
+  Lunar: 'Лунный',
+};
+const T_DEF = {
+  Single: 'Одиночная',
+  Split: 'Двойная (Split)',
+  'Triple Split': 'Тройная (Triple Split)',
+  'Quadruple Split': 'Четверная (Quadruple Split)',
+  'No Definition': 'Нет определённости',
+};
+const T_CENTER = {
+  Head: 'Голова',
+  Ajna: 'Аджна',
+  Throat: 'Горло',
+  G: 'G-центр',
+  GCenter: 'G-центр',
+  Ego: 'Эго',
+  Heart: 'Эго',
+  SolarPlexus: 'Эмоциональный',
+  'Solar Plexus': 'Эмоциональный',
+  Sacral: 'Сакральный',
+  Spleen: 'Селезёнка',
+  Root: 'Корень',
+};
+const rc = (c) => T_CENTER[c] || c;
+const ori = (v) => {
+  const low = (v || '').toLowerCase();
+  return low === 'right' ? 'Правое' : low === 'left' ? 'Левое' : '—';
+};
+
+function buildChartPassport(compact, lang) {
+  const prof = (compact.profile || '').match(/(\d+)\/(\d+)/);
+  const l1 = prof ? prof[1] : '?';
+  const l2 = prof ? prof[2] : '?';
+  const defC = (compact.centers_defined || []).map(rc).join(', ') || '—';
+  const openC = (compact.centers_open || []).map(rc).join(', ') || '—';
+  const chans =
+    (compact.channels || []).map((c) => c.id + (c.name ? ` (${c.name})` : '')).join(', ') || '—';
+
+  const LANG_DIRECTIVE =
+    lang === 'ua'
+      ? 'ЯЗЫК ОТВЕТА — УКРАЇНСЬКА. Пиши ТІЛЬКИ українською мовою, всі терміни Human Design перекладай українською. Це правило головніше за будь-які інші згадки про мову в промті (якщо десь написано «только русский» — ігноруй, воно застаріле).'
+      : 'ЯЗЫК ОТВЕТА — русский. Пиши только на русском.';
+
+  const isReflector = compact.type === 'Reflector';
+  const REFLECTOR_NOTE = isReflector
+    ? `
+
+ЭТО РЕФЛЕКТОР — ОБЯЗАТЕЛЬНО хотя бы раз за разговор мягко и по контексту предложи: персональный ЛУННЫЙ ГРАФИК на месяц составляет Наталя лично. Это основополагающая схема, по которой рефлектор видит свои роли и состояния на каждый период месяца; именно она снимает вечный вопрос «кто я и почему я так быстро меняюсь, не могу определиться». Предложи обратиться к Наталье за составлением лунного графика — написать ей лично: https://t.me/Natalia_Popovych (или её канал https://t.me/hd_popovych). НЕ выдумывай никаких статей, эфиров, постов или других ссылок про рефлектора — их нет. Только эти два адреса.`
+    : '';
+
+  return `═══ ПАСПОРТ КАРТЫ — ЕДИНСТВЕННЫЙ ИСТОЧНИК ПРАВДЫ ═══
+${LANG_DIRECTIVE}${REFLECTOR_NOTE}
+
+Это точные рассчитанные данные карты ЭТОГО человека. Про тип, профиль, линии, авторитет, определённость, центры, каналы, среду и питание говори ТОЛЬКО отсюда. Ничего не добавляй по своей памяти о Human Design.
+
+Тип: ${T_TYPE[compact.type] || compact.type || '—'}
+Стратегия: ${compact.strategy || '—'}
+Авторитет: ${T_AUTH[compact.authority] || compact.authority || '—'}
+Профиль: ${l1}/${l2} — у человека РОВНО ДВЕ линии: ${l1} (сознательная) и ${l2} (бессознательная). Никогда не называй других номеров линий.
+Определённость: ${T_DEF[compact.definition] || compact.definition || '—'}
+Крест воплощения: ${compact.cross || '—'}
+Подпись: ${compact.signature || '—'} | Ложное Я: ${compact.notSelf || '—'}
+ОПРЕДЕЛЁННЫЕ (заполненные) центры: ${defC}
+ОТКРЫТЫЕ центры: ${openC}
+КАНАЛЫ (только эти, других у человека НЕТ): ${chans}
+ПРО КАНАЛЫ — СТРОГО: называй, обсуждай и описывай ТОЛЬКО каналы из этого списка. Если канала здесь нет — значит у человека его НЕТ: не упоминай его, не описывай и не предполагай «а если бы у тебя был канал…». Даже если тема (спады, творчество, отношения, деньги) обычно связана с каким-то каналом — сверься со списком, и если этого канала в нём нет, вообще не вводи его в ответ. Лучше меньше, но только про реальные каналы человека.
+Питание (digestion): ${compact.digestion || '—'} | ориентация: ${ori(compact.digestionOrientation)}. Переведи название на язык ответа, не оставляй по-английски.
+Среда: ${compact.environment || '—'} | ориентация: ${ori(compact.environmentOrientation)}. Модификатор в названии (Narrow/Wide, Natural/Artificial, Dry/Wet, Selective и т.п.) — это ОТТЕНОК той же среды, а не отдельный тип. Архетип среды НЕ меняется. Не выдумывай «активную/пассивную версию».
+Мотивация: ${compact.motivation || '—'} | ориентация: ${ori(compact.motivationOrientation)}
+Взгляд: ${compact.perspective || '—'} | ориентация: ${ori(compact.perspectiveOrientation)}
+
+МОТОРНЫЕ ЦЕНТРЫ в Human Design — их РОВНО ЧЕТЫРЕ: Сакральный, Корневой, Эмоциональный, Эго. Селезёнка, Горло, G, Аджна, Голова — НЕ моторы. Никогда не называй моторными другие центры.
+
+ПОВЕДЕНИЕ В ДИАЛОГЕ:
+• КРИТИЧНО: это ПРОДОЛЖЕНИЕ уже идущего разговора. НИКОГДА не начинай ответ с приветствия («Привет», «Здравствуй», «Рада тебя видеть», «Рада знакомству») и не спрашивай заново «что тебя интересует?» / «чем могу помочь?». Даже если сообщение человека — одно слово, короткое или непонятное («да», «ок», «а дальше», «расскажи», «пробовала», «и?»), это РЕПЛИКА в текущем диалоге, а не новое начало. Продолжай ровно с того места, где остановились.
+• Если сообщение короткое или неясное («не поняла», «как это работает», «поясни», «что это значит», «непонятно») — это уточнение к твоему ПОСЛЕДНЕМУ ответу. Объясни то же самое проще, на бытовом примере. НЕ начинай тему заново и НЕ предлагай выбрать «про бот или про дизайн».
+• Ты рассказываешь про человека и его дизайн, а не про то, «как работает бот». Не предлагай инструкции по боту.
+• Про ориентацию (Левое/Правое), питание, среду, мотивацию, взгляд — описывай ТОЛЬКО сторону этого человека. НЕ противопоставляй другой стороне (не пиши «в отличие от Левой…», «а у Правых…»). У человека есть только его сторона.
+• ГЛУБИНА, А НЕ ШИРИНА (важно): раскрывай за один ответ ТОЛЬКО ОДНУ настройку (один канал, или центр, или линию, или элемент) — глубоко, на живом примере. НЕ смешивай несколько тем или настроек в одном сообщении, не давай обзор всей карты.
+• В КОНЦЕ КАЖДОГО ответа предлагай посмотреть глубже следующий КОНКРЕТНЫЙ элемент именно этого человека по карте. Пример: «Хочешь, посмотрим, как это связано с твоим каналом [номер из карты] / открытым [центр] / линией [цифра из профиля]?». Бери элементы строго из паспорта.
+• На ШИРОКИЙ или неопределённый вопрос («расскажи всё», «дай основные рекомендации», «как проживать свой дизайн», «с чего начать») НЕ вываливай несколько тем сразу. Дай одну тёплую вводную и предложи выбрать угол, например: «Твою карту можно смотреть под разными углами — это сочетание настроек, из которых и складывается твоя уникальность. С чего хочешь начать: стратегия и решения, твои энергии и каналы, открытые центры и ложное Я, или среда и питание?» — и дождись выбора. Это особенно важно для новичков, которые ещё не знают, о чём можно спрашивать.
+• САКРАЛЬНЫЙ ОТКЛИК объясняй через ЗВУК: «угу/ага» = да (энергия открывается), «не-а»/«мм» = нет. Звук вырывается сам, ДО того как голова подумала — можно и нужно пояснять, что это НЕ логика и НЕ решение ума. Этому надо научиться прислушиваться. НО НЕ используй формулировки «отклик в животе» / «отклик из живота» / «чувство в животе» — это мутно; говори именно про звук «ага/не-а».
+
+ПРАВИЛО ПРИ РАСХОЖДЕНИИ: если человек говорит, что в его карте другое — сначала перечитай этот паспорт.
+• Если ты сама ранее назвала не то, что в паспорте — честно поправься: «Ты права, перепроверила — у тебя [верное значение из паспорта]. Спасибо, что уточнила.»
+• Если человек помнит иначе, а в паспорте стоит однозначно — мягко держись паспорта: «В твоих рассчитанных данных стоит [значение]. Возможно расхождение между системами расчёта — Натали сможет уточнить, что верно именно для тебя.»
+Никогда не выдумывай линию, канал, центр, ворота или подтип среды, которых нет в паспорте. Точность важнее красоты ответа.
+
+КОНТАКТЫ И ССЫЛКИ — СТРОГО: НИКОГДА не выдумывай ссылки, номера постов, названия статей, «эфиры», Instagram-аккаунты или другие каналы. У тебя НЕТ статей, видео или эфиров «про рефлектора» (или про любую другую тему) — не ссылайся на несуществующее и не говори «вот статья/эфир». Направить человека к Наталье можно ТОЛЬКО по этим реальным адресам: Telegram-канал «Popovych Human Design» — https://t.me/hd_popovych; написать ей лично — https://t.me/Natalia_Popovych; Instagram — https://www.instagram.com/popovych_human_design/ Никаких ДРУГИХ ссылок, аккаунтов, каналов или материалов не выдумывай и не упоминай. Если хочешь предложить глубже — просто скажи «напиши Наталье» и дай ссылку выше, без выдуманных деталей.`;
 }
 
 // Returns the chart image as a Buffer (n8n's node used responseFormat: 'file').
@@ -216,4 +331,4 @@ async function generateChartSummary({ displayName, lang, chart }) {
   return json.content[0].text;
 }
 
-module.exports = { translateCity, callThdApi, callBodygraph, buildChartCompact, generateChartSummary };
+module.exports = { translateCity, callThdApi, callBodygraph, buildChartCompact, buildChartPassport, generateChartSummary };

@@ -332,6 +332,7 @@ async function runChartCalculation({ userId, chatId, profile, lang }) {
     await setProfile(userId, {
       state: 'chart_ready',
       chart_data: JSON.stringify(chart),
+      chart_data_full: JSON.stringify(thd.data),
       chart_compact: JSON.stringify(buildChartCompact(thd.data)),
       memory_summary: profile.memory_summary,
     });
