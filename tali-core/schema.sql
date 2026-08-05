@@ -23,7 +23,11 @@ create table if not exists identity_links (
 create table if not exists entitlements (
   user_id uuid primary key references users(id) on delete cascade,
   plan text not null default 'free',
-  status text not null default 'active',
+  -- 'free' | 'active' | 'expired' — matches n8n's subscription_status
+  -- exactly (see "bc_free"/"bc_active"/"bc_expired" filters in the real
+  -- workflow), so the paywall gate can compare against the same three
+  -- values it already uses.
+  status text not null default 'free',
   questions_used int not null default 0,
   questions_limit int not null default 5,
   subscription_expires_at timestamptz,
@@ -47,6 +51,16 @@ alter table entitlements alter column questions_limit set default 5;
 -- 04.08.2026 (this file previously had the wrong figure). Same reasoning as
 -- above: explicit alter needed so it actually takes effect on your database.
 alter table entitlements alter column monthly_limit set default 120;
+
+-- status default was wrongly 'active' — every brand-new, never-paid user
+-- (see identityCore.js's resolveIdentity) got an entitlements row that
+-- LOOKED like a paying active subscriber, which would have made the paywall
+-- gate below let everyone through unlimited. Found 05.08.2026 while building
+-- the paywall. Fixes both the default AND any test rows already wrongly
+-- marked 'active' that never actually paid (no subscription_expires_at set
+-- — a real payer always has one, from the WayForPay callback handler).
+alter table entitlements alter column status set default 'free';
+update entitlements set status = 'free' where status = 'active' and subscription_expires_at is null;
 
 -- Single payments ledger, replacing WayForPay logic duplicated in three places.
 create table if not exists payments (
