@@ -153,10 +153,28 @@ async function sendPhotoBuffer(chatId, buffer, caption) {
   return res.ok;
 }
 
+// Matches "Видео приветствие" — a raw sendVideoNote call with a fixed
+// file_id. IMPORTANT: Telegram file_ids are scoped to the bot that
+// originally received/uploaded the file — the real n8n node hardcodes both
+// the live bot's token AND a file_id that was uploaded through that same
+// live bot. Copying that exact file_id here would silently fail against our
+// test bot (different bot = different file_id namespace), so this reads
+// both the token (already have it — TOKEN above) and the file_id from an
+// env var, so swapping between the test bot (while building) and the real
+// bot (at cutover) is just a config change, not a code change.
+async function sendVideoNote(chatId) {
+  const fileId = process.env.WELCOME_VIDEO_NOTE_FILE_ID;
+  if (!fileId) {
+    console.error('sendVideoNote skipped — WELCOME_VIDEO_NOTE_FILE_ID not set');
+    return false;
+  }
+  return callTelegram('sendVideoNote', { chat_id: chatId, video_note: fileId });
+}
+
 // Telegram shows a loading spinner on an inline button until this is called —
 // matches the "Answer Callback Query" node in n8n.
 async function answerCallbackQuery(callbackQueryId) {
   return callTelegram('answerCallbackQuery', { callback_query_id: callbackQueryId });
 }
 
-module.exports = { sendMessage, sendPhoto, sendPhotoBuffer, answerCallbackQuery };
+module.exports = { sendMessage, sendPhoto, sendPhotoBuffer, sendVideoNote, answerCallbackQuery };
