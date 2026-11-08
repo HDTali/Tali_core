@@ -246,8 +246,14 @@ ${LANG_DIRECTIVE}${REFLECTOR_NOTE}
 }
 
 // Returns the chart image as a Buffer (n8n's node used responseFormat: 'file').
-async function callBodygraph(thdData) {
-  const res = await fetch('https://tali-bodygraph.onrender.com/bodygraph', {
+// opts.theme is optional: the website passes 'site' for its own colours.
+// Telegram onboarding calls this without opts, so its URL (and picture) stay exactly as before.
+async function callBodygraph(thdData, opts) {
+  const theme = opts && opts.theme;
+  const url = theme
+    ? `https://tali-bodygraph.onrender.com/bodygraph?theme=${encodeURIComponent(theme)}`
+    : 'https://tali-bodygraph.onrender.com/bodygraph';
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(thdData),

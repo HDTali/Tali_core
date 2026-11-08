@@ -5,6 +5,7 @@ const identityRoutes = require('./src/routes/identity');
 const entitlementsRoutes = require('./src/routes/entitlements');
 const wayforpayRoutes = require('./src/routes/wayforpay');
 const webhookRoutes = require('./src/routes/webhook');
+const webRoutes = require('./src/routes/web'); // English website, added 08.11.2026
 
 const app = express();
 
@@ -22,6 +23,7 @@ app.use('/identity', identityRoutes);
 app.use('/entitlements', entitlementsRoutes);
 app.use('/webhooks/wayforpay', wayforpayRoutes);
 app.use('/webhook', webhookRoutes);
+app.use('/web', webRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`tali-core-identity-billing listening on ${PORT}`));

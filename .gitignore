@@ -1,0 +1,9 @@
+# Keys and passwords live only in .env on your computer and in Render → Environment.
+# This repository is public, so .env must never be uploaded.
+.env
+.env.*
+!.env.example
+
+node_modules/
+npm-debug.log*
+.DS_Store

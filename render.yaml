@@ -1,6 +1,6 @@
 databases:
   - name: tali-core-db
-    plan: free
+    plan: basic-256mb  # paid plan, matches Render (checked 08.11.2026)
     region: frankfurt
 
 services:
