@@ -323,9 +323,14 @@ async function generateChartSummary({ displayName, lang, chart }) {
       'anthropic-version': '2023-06-01',
       'x-api-key': process.env.ANTHROPIC_API_KEY,
     },
+    // 09.11.2026: claude-sonnet-4-5 is retired on 30.11.2026 -> claude-sonnet-5-5.
+    // Sonnet 5.5 thinks by default and would put a "thinking" block first;
+    // "between_tools" is its lowest setting (no thinking without tools), so the
+    // answer stays a plain text block, the same as before.
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-5-5',
       max_tokens: 3000,
+      thinking: { type: 'between_tools' },
       system,
       messages: [{ role: 'user', content: userMessage }],
     }),
@@ -334,7 +339,15 @@ async function generateChartSummary({ displayName, lang, chart }) {
   if (!res.ok) {
     throw new Error(`Claude chart summary failed: ${res.status} ${JSON.stringify(json)}`);
   }
-  return json.content[0].text;
+  if (json.stop_reason === 'refusal') {
+    throw new Error('Claude chart summary declined (refusal)');
+  }
+  console.log(
+    `[chart summary] model ${json.model}, blocks: ${(json.content || []).map((b) => b.type).join(',')}, out ${json.usage && json.usage.output_tokens} tokens`
+  );
+  const textBlock = (json.content || []).find((b) => b.type === 'text');
+  if (!textBlock) throw new Error(`Claude chart summary has no text block: ${JSON.stringify(json).slice(0, 300)}`);
+  return textBlock.text;
 }
 
 module.exports = { translateCity, callThdApi, callBodygraph, buildChartCompact, buildChartPassport, generateChartSummary };
