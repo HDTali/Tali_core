@@ -68,8 +68,9 @@ function composeReading(facts, name) {
     throw new Error(`reading library has no text for type=${facts.type} authority=${facts.authority} profile=${facts.profile}`);
   }
   const [l1, l2] = pk.split('/');
+  const profileName = officialProfileName(facts.profile);
   const line = (n, side) => ({
-    sub: `Line ${n}, ${LIB.lines[n].name}: ${LIB.profileLineLabels[side]}`,
+    sub: `Line ${n}, ${LIB.lines[n].name} (${LIB.lines[n].friendly}): ${LIB.profileLineLabels[side]}`,
     text: LIB.lines[n].text,
   });
 
@@ -80,14 +81,26 @@ function composeReading(facts, name) {
       { title: `How you move through life: ${t.strategyName}`, items: t.strategy },
       { title: `How you make decisions: ${a.name}`, items: a.text },
       {
-        title: `Your profile: ${pk}${facts.profileName ? ` ${facts.profileName}` : ''}`,
+        title: `Your profile: ${pk}${profileName ? ` ${profileName}` : ''}`,
         items: [profileText, line(l1, 'conscious'), line(l2, 'unconscious')],
       },
-      { title: `When you are on your path: ${t.signatureName}`, items: [t.signature] },
-      { title: `Signs you've drifted: ${t.notSelfName}`, items: [t.notSelf] },
+      { title: `When things feel aligned: ${t.signatureName}`, items: [t.signature] },
+      { title: `When things feel out of balance: ${t.notSelfName}`, items: [t.notSelf] },
     ],
+    closingTitle: LIB.closingTitle,
     closing: LIB.closing,
   };
+}
+
+// Official Human Design profile name, built from the line names in the
+// library (e.g. "2/5" -> "Hermit / Heretic"). Our friendly names appear only in the line explanations.
+function officialProfileName(profile) {
+  const pk = profileKey(profile);
+  if (!pk) return '';
+  return pk
+    .split('/')
+    .map((n) => (LIB.lines[n] ? LIB.lines[n].name : n))
+    .join(' / ');
 }
 
 // ---------------------------------------------------------------------------
@@ -174,7 +187,7 @@ function renderPdf({ name, birth, placeLabel, facts, reading, bodygraphPng }) {
       ['Type', facts.type],
       ['Strategy', facts.strategy],
       ['Inner authority', facts.authority],
-      ['Profile', `${facts.profile}${facts.profileName ? `  ${facts.profileName}` : ''}`],
+      ['Profile', `${facts.profile}  ${officialProfileName(facts.profile)}`.trim()],
       ['Definition', facts.definition],
       ['Signature', facts.signature],
       ['Not-self theme', facts.notSelf],
@@ -213,15 +226,24 @@ function renderPdf({ name, birth, placeLabel, facts, reading, bodygraphPng }) {
       doc.moveDown(0.6);
     }
 
-    ensureSpace(80);
-    doc.font('serif-italic').fontSize(15).fillColor(C.ink).text(reading.closing, L, doc.y, { width: CW, lineGap: 2.5 });
-    doc.moveDown(1.4);
+    ensureSpace(160);
+    if (reading.closingTitle) {
+      doc.font('serif-bold').fontSize(21).fillColor(C.ink).text(reading.closingTitle, L, doc.y, { width: CW });
+      goldRule(doc.y + 5);
+      doc.y += 16;
+    }
+    for (const para of String(reading.closing).split(/\n\n/)) {
+      ensureSpace(40);
+      doc.font('serif-italic').fontSize(15).fillColor(C.ink).text(para, L, doc.y, { width: CW, lineGap: 2.5 });
+      doc.moveDown(0.6);
+    }
+    doc.moveDown(0.8);
 
     // ---- Go deeper ----
     const offers = [
-      ['Audio reading', 'A recorded reading of your whole chart: your centers, channels and incarnation cross. Listen whenever you like. In English, Russian or Ukrainian.'],
-      ['Personal session', 'We look at your chart together, live, and at the questions that matter to you right now.'],
-      ['Tali, my AI assistant', 'Explore your chart in conversation, at your own pace. Join the waitlist on the site to hear first when Tali speaks English.'],
+      ['Personal Readings', 'Explore your career, well-being, relationships, or personal potential.'],
+      ['Love & Family', "Explore relationship dynamics, your child's individuality, and family connections."],
+      ['Personal Mentoring', 'A three-month journey of reflection, personal guidance, and meaningful change.'],
     ];
     const boxPad = 22;
     const innerW = CW - boxPad * 2;
@@ -242,12 +264,19 @@ function renderPdf({ name, birth, placeLabel, facts, reading, bodygraphPng }) {
     doc.font('sans-semi').fontSize(10).fillColor(C.bronze);
     const linksY = doc.y + 2;
     const siteLabel = SITE_URL.replace(/^https?:\/\//, '');
-    doc.text(siteLabel, L + boxPad, linksY, { link: `${SITE_URL}/#readings`, underline: false, continued: true })
+    doc.text('Explore personal readings', L + boxPad, linksY, { link: `${SITE_URL}/#readings`, underline: false, continued: true })
       .fillColor(C.soft).text('   ·   ', { continued: true })
       .fillColor(C.bronze).text('Telegram', { link: TELEGRAM_URL, continued: true })
       .fillColor(C.soft).text('   ·   ', { continued: true })
       .fillColor(C.bronze).text(CONTACT_EMAIL, { link: `mailto:${CONTACT_EMAIL}` });
-    doc.y = boxY + boxH + 18;
+    doc.y = boxY + boxH + 14;
+
+    // Tali: a small, separate note, clearly marked as coming soon.
+    doc.font('sans-semi').fontSize(9).fillColor(C.bronze).text('COMING SOON', L, doc.y, { characterSpacing: 1.4, continued: true })
+      .font('sans').fillColor(C.soft)
+      .text('   Tali, a personal AI companion for your chart. Waitlist: ', { characterSpacing: 0, continued: true })
+      .fillColor(C.bronze).text(siteLabel, { link: `${SITE_URL}/#tali` });
+    doc.y += 14;
 
     doc.font('sans').fontSize(8).fillColor(C.soft).text(
       'Human Design is a tool for self-knowledge. It does not replace medical, psychological, legal or financial advice.',
@@ -320,20 +349,27 @@ async function sendEmail({ to, subject, paragraphs, text, attachments }) {
 }
 
 function readingLetter(name) {
+  // Copy from the English website brief (09.11.2026). No free-call offer here on purpose.
   const hello = name ? `Hi ${escapeHtml(name)},` : 'Hello,';
+  const lines = [
+    'Your first Human Design reading is here.',
+    "Inside, you'll find a new perspective on your natural strengths, decision-making style, and the patterns that make you unique.",
+    'Take your time exploring it. Notice what feels familiar, what surprises you, and what questions come up along the way.',
+    "And if there's something in your life you'd like to understand more deeply, I'd be happy to explore it with you.",
+  ];
   const paragraphs = [
     hello,
-    'Your first Human Design reading is attached as a PDF. Read it slowly, and notice what feels true for you.',
-    `If you want to go deeper, I read charts personally, in English, Russian or Ukrainian. You can find the options on <a href="${SITE_URL}/#readings" style="color:#765B37">my site</a>, or simply reply to this email.`,
+    ...lines,
+    `You can find my personal readings here:<br><a href="${SITE_URL}/#readings" style="color:#765B37">${escapeHtml(SITE_URL.replace(/^https?:\/\//, ''))}/#readings</a>`,
     'With warmth,<br>Nataly',
     `<span style="font-size:12px;color:#5C567F">You receive this email because you asked for your reading on ${escapeHtml(SITE_URL.replace(/^https?:\/\//, ''))}.</span>`,
   ];
   const text =
     `${name ? `Hi ${name},` : 'Hello,'}\n\n` +
-    'Your first Human Design reading is attached as a PDF. Read it slowly, and notice what feels true for you.\n\n' +
-    `If you want to go deeper, I read charts personally, in English, Russian or Ukrainian: ${SITE_URL}/#readings, or simply reply to this email.\n\n` +
+    lines.join('\n\n') +
+    `\n\nYou can find my personal readings here:\n${SITE_URL}/#readings\n\n` +
     'With warmth,\nNataly';
-  return { subject: 'Your first Human Design reading', paragraphs, text };
+  return { subject: 'Your Human Design reading is here', paragraphs, text };
 }
 
 function waitlistLetter() {
@@ -341,12 +377,14 @@ function waitlistLetter() {
     subject: "You're on the Tali waitlist",
     paragraphs: [
       'Hello,',
-      "Thank you for joining the waitlist. Tali is my AI assistant: she helps you explore your Human Design chart in conversation. I'll write to you when she speaks English.",
+      'Thank you for joining the waitlist.',
+      "Tali is a personal AI companion I'm creating to help you explore your Human Design chart, ask questions, and discover new perspectives at your own pace.",
+      "I'll write to you when the English version is available.",
       'With warmth,<br>Nataly',
       `<span style="font-size:12px;color:#5C567F">You receive this email because you joined the Tali waitlist on ${escapeHtml(SITE_URL.replace(/^https?:\/\//, ''))}. To leave the list, reply with "unsubscribe".</span>`,
     ],
     text:
-      "Hello,\n\nThank you for joining the waitlist. Tali is my AI assistant: she helps you explore your Human Design chart in conversation. I'll write to you when she speaks English.\n\nWith warmth,\nNataly\n\nTo leave the list, reply with \"unsubscribe\".",
+      "Hello,\n\nThank you for joining the waitlist.\n\nTali is a personal AI companion I'm creating to help you explore your Human Design chart, ask questions, and discover new perspectives at your own pace.\n\nI'll write to you when the English version is available.\n\nWith warmth,\nNataly\n\nTo leave the list, reply with \"unsubscribe\".",
   };
 }
 
