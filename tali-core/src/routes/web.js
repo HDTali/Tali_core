@@ -1,4 +1,4 @@
-// Routes for the English website (Next.js on Netlify). Added 08.11.2026.
+// Routes for the English website (Next.js on Cloudflare Pages). Added 08.11.2026.
 // Only NEW routes live here, under /web/... — Telegram, WayForPay and
 // entitlements routes are not touched.
 //
@@ -103,33 +103,7 @@ function cleanInput(body) {
 }
 
 // ---- Turning THD wording into simple keys the site's texts use ----
-function typeKey(type) {
-  const t = String(type || '').toLowerCase();
-  if (t.includes('manifesting')) return 'manifesting_generator';
-  if (t.includes('generator')) return 'generator';
-  if (t.includes('manifestor')) return 'manifestor';
-  if (t.includes('projector')) return 'projector';
-  if (t.includes('reflector')) return 'reflector';
-  return null;
-}
-
-function authorityKey(authority) {
-  const a = String(authority || '').toLowerCase();
-  if (a.includes('emotion') || a.includes('solar')) return 'emotional';
-  if (a.includes('sacral')) return 'sacral';
-  if (a.includes('splen')) return 'splenic';
-  if (a.includes('self')) return 'self_projected';
-  if (a.includes('ego') || a.includes('heart')) return 'ego';
-  if (a.includes('lunar') || a.includes('moon')) return 'lunar';
-  if (a.includes('mental') || a.includes('environment') || a.includes('sounding') || a.includes('none'))
-    return 'mental';
-  return null;
-}
-
-function profileKey(profile) {
-  const m = /(\d)\s*\/\s*(\d)/.exec(String(profile || ''));
-  return m ? `${m[1]}/${m[2]}` : null;
-}
+const { typeKey, authorityKey, profileKey } = require('../webKeys');
 
 function publicChart(thdData) {
   const c = (thdData && thdData.chart) || {};
@@ -308,5 +282,155 @@ router.post('/chart', async (req, res) => {
   }
 });
 
+// ===========================================================================
+// Stage 5 (09.11.2026): PDF reading by email + Tali waitlist.
+// ===========================================================================
+const { resolveIdentity } = require('../identityCore');
+const { buildChartCompact } = require('../chartCalc');
+const webReading = require('../webReading');
+
+webReading.startBackgroundJobs();
+
+const MAIL_FORMS_PER_IP_PER_HOUR = Number(process.env.WEB_MAIL_FORMS_PER_IP_PER_HOUR || 6);
+const READINGS_PER_EMAIL_PER_DAY = Number(process.env.WEB_READINGS_PER_EMAIL_PER_DAY || 3);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function cleanEmail(value) {
+  const email = String(value || '').trim().toLowerCase();
+  if (email.length > 254) return null;
+  return /^[^\s@<>()",;:]+@[^\s@<>()",;:]+\.[^\s@<>()",;:]{2,}$/.test(email) ? email : null;
+}
+
+function cleanName(value) {
+  const name = String(value || '')
+    .replace(/[^\p{L}\p{M}' .-]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 40);
+  return name || null;
+}
+
+async function saveConsent(email, purpose) {
+  await pool.query(
+    'INSERT INTO consents (email, purpose, policy_version, consent_text) VALUES ($1, $2, $3, $4)',
+    [email, purpose, webReading.CONSENT_VERSION, webReading.CONSENT_TEXTS[purpose]]
+  );
+}
+
+// ---- POST /web/reading-email — "send my first reading as a PDF" ----
+// Body: { chartId, email, name?, consent: true, news?: boolean, website?: '' (bot trap) }
+// Answers at once; Claude + PDF + email happen in the background (about a minute).
+router.post('/reading-email', async (req, res) => {
+  const ip = clientIp(req);
+  if (overLimit(`mail:${ip}`, MAIL_FORMS_PER_IP_PER_HOUR)) {
+    return res.status(429).json({ error: 'too_many_requests' });
+  }
+  const b = req.body || {};
+  if (b.website) return res.json({ ok: true }); // hidden field filled in: a bot, quietly ignored
+
+  const email = cleanEmail(b.email);
+  if (!email) return res.status(400).json({ error: 'bad_email' });
+  if (b.consent !== true) return res.status(400).json({ error: 'consent_required' });
+  const chartId = String(b.chartId || '');
+  if (!UUID_RE.test(chartId)) return res.status(400).json({ error: 'bad_chart' });
+  const name = cleanName(b.name);
+
+  try {
+    const chart = await pool.query(
+      'SELECT id, birth_date, birth_time, birth_location, thd_data FROM web_charts WHERE id = $1',
+      [chartId]
+    );
+    if (!chart.rows.length) return res.status(404).json({ error: 'chart_not_found' });
+    const wc = chart.rows[0];
+
+    const recent = await pool.query(
+      `SELECT count(*)::int AS n,
+              count(*) FILTER (WHERE web_chart_id = $2 AND status <> 'failed')::int AS same
+       FROM reading_requests WHERE email = $1 AND created_at > now() - interval '24 hours'`,
+      [email, chartId]
+    );
+    if (recent.rows[0].same > 0) return res.json({ ok: true, already: true }); // double click / resend
+    if (recent.rows[0].n >= READINGS_PER_EMAIL_PER_DAY) {
+      return res.status(429).json({ error: 'too_many_for_email' });
+    }
+
+    await saveConsent(email, 'reading_pdf');
+    if (b.news === true) await saveConsent(email, 'news');
+
+    // Same people table as the Telegram bot (provider 'email'), so a future
+    // web version of Tali recognises this person. The profile is created only
+    // once and never overwritten here.
+    let userId = null;
+    try {
+      userId = (await resolveIdentity('email', email)).user_id;
+      const [y, m, d] = wc.birth_date.split('-');
+      await pool.query(
+        `INSERT INTO profiles (user_id, state, display_name, birth_date, birth_time, birth_location, lang,
+                               chart_data, chart_data_full, chart_compact)
+         VALUES ($1, 'chart_ready', $2, $3, $4, $5, 'en', $6, $7, $8)
+         ON CONFLICT (user_id) DO NOTHING`,
+        [
+          userId,
+          name,
+          `${d}.${m}.${y}`,
+          wc.birth_time,
+          wc.birth_location,
+          JSON.stringify(wc.thd_data.chart || {}),
+          JSON.stringify(wc.thd_data),
+          JSON.stringify(buildChartCompact(wc.thd_data)),
+        ]
+      );
+    } catch (err) {
+      // Not needed for the letter itself — log and carry on.
+      console.error('[web/reading-email] identity/profile step failed:', err.message);
+    }
+
+    const inserted = await pool.query(
+      `INSERT INTO reading_requests (web_chart_id, user_id, email, display_name)
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [chartId, userId, email, name]
+    );
+    webReading.enqueue(inserted.rows[0].id);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[web/reading-email] failed:', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// ---- POST /web/waitlist — "tell me when Tali speaks English" ----
+// Body: { email, consent: true, website?: '' }
+router.post('/waitlist', async (req, res) => {
+  const ip = clientIp(req);
+  if (overLimit(`mail:${ip}`, MAIL_FORMS_PER_IP_PER_HOUR)) {
+    return res.status(429).json({ error: 'too_many_requests' });
+  }
+  const b = req.body || {};
+  if (b.website) return res.json({ ok: true });
+  const email = cleanEmail(b.email);
+  if (!email) return res.status(400).json({ error: 'bad_email' });
+  if (b.consent !== true) return res.status(400).json({ error: 'consent_required' });
+
+  try {
+    await saveConsent(email, 'tali_waitlist');
+    const r = await pool.query(
+      `INSERT INTO waitlist (email) VALUES ($1)
+       ON CONFLICT (email) DO UPDATE SET unsubscribed_at = NULL
+       RETURNING (xmax = 0) AS is_new`,
+      [email]
+    );
+    if (r.rows[0].is_new) {
+      // A short "you're on the list" letter; the answer to the site doesn't wait for it.
+      webReading
+        .sendEmail({ to: email, ...webReading.waitlistLetter() })
+        .catch((err) => console.error('[web/waitlist] confirmation email failed:', err.message));
+    }
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[web/waitlist] failed:', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
 module.exports = router;
-module.exports._test = { cleanInput, typeKey, authorityKey, profileKey, publicChart };
+module.exports._test = { cleanInput, typeKey, authorityKey, profileKey, publicChart, cleanEmail, cleanName };

@@ -1,0 +1,203 @@
+{
+  "_note": "Texts of the free PDF reading (stage 5, 09.11.2026). The PDF is assembled from these ready texts, so it costs nothing per person. Written from Nataly's book texts (the site's report.en.json) and Tali's knowledge base, a little longer than on the site. Edit freely: keep the keys (left of the colon), change only the text in quotes. Rules of voice: 'you', short sentences, no long dash, no 'you should'.",
+
+  "opening": {
+    "withName": "{name}, here is a first look at who you are by design. Read it slowly, and notice what feels true for you. Nothing here is a rule to follow. It is a description of your nature, so you can recognise yourself in it.",
+    "noName": "Here is a first look at who you are by design. Read it slowly, and notice what feels true for you. Nothing here is a rule to follow. It is a description of your nature, so you can recognise yourself in it."
+  },
+
+  "closing": "This is only a first look. Your chart holds much more: your centers, your channels and the main theme of your life, your incarnation cross. If you feel like going deeper, I would be glad to read it with you personally.",
+
+  "types": {
+    "generator": {
+      "type": [
+        "You are a Generator, one of the life forces of this world. About a third of all people are Generators. Inside you works a powerful engine: a steady, renewable energy for work, for growth and for creating. When this engine is busy with something that truly lights you up, it can run for hours, and you get better and better at it. You come to know yourself through what you do.",
+        "Your aura is open and enveloping. Like a warm magnet, it draws people, opportunities and events to you. People feel your energy and want to be near it. This is why you don't need to chase life. Life comes to you and asks you questions all the time: an offer, a request, an idea someone shares, something you notice on the way.",
+        "Your natural role is mastery. You grow a skill step by step, sometimes over years, until it becomes true expertise. On the way there may be plateaus, when it feels like nothing moves. They are part of the path: after a plateau comes a new level. When you love what you do, your satisfaction is contagious, and it inspires everyone around you."
+      ],
+      "strategyName": "To respond",
+      "strategy": [
+        "Your strategy is to respond. It means you don't have to invent your life in your head and push it into motion. Instead, you notice what life brings, and you check how your body answers. Your body answers with a sound before your mind has time to think: \"uh-huh\" for yes, \"uhn-uh\" for no. A true yes also feels like energy rising to act.",
+        "Imagine a friend asks if you want to join a new project. Your head starts weighing pros and cons. But before that, something in you has already answered: maybe a bright \"uh-huh\", maybe a flat silence. That first answer is yours. When you follow it, the energy is there. When you start things only because they seem right or useful, the engine often stays cold."
+      ],
+      "signatureName": "Satisfaction",
+      "signature": "Satisfaction is your sign that you are on your path. It is the feeling at the end of the day when your energy has been fully used on what you love, and you are tired in a good way. You sleep deeply and wake up with new energy. Satisfaction is quiet and warm. It comes not only from results, but from the doing itself.",
+      "notSelfName": "Frustration",
+      "notSelf": "Frustration is the opposite sign. It comes when you start things from your head, say yes out of duty, or keep going with something your body never wanted. Then the energy doesn't come, things get stuck, and you may give up halfway or feel like you are running in circles. Frustration is not a failure. It is a gentle navigator: it tells you your energy is going to the wrong place, and invites you back to your response."
+    },
+
+    "manifesting_generator": {
+      "type": [
+        "You are a Manifesting Generator. You carry the strong, renewable energy of a Generator, and with it a quick urge to act, like a Manifestor. Your engine runs fast. When something truly lights you up, you move from idea to action in a moment, and you often see the shortest way to the result before anyone else does.",
+        "Your aura is open and enveloping, and it moves fast. People are drawn to you, and sometimes they can't keep up with your pace. You may start several things at once, drop some of them and jump to something new. This is not a flaw and not a lack of focus. It is how you find what is truly yours: by trying, and by leaving what doesn't fit.",
+        "Your natural role is to show that things can be done quickly, in many ways, and done well. You are often skilled in several areas at once, and you connect them in your own unique way. Skipping steps is part of your speed, and sometimes you go back for one you missed. That is fine. It is part of how you learn."
+      ],
+      "strategyName": "To respond, then inform",
+      "strategy": [
+        "Your strategy has two steps. First, like a Generator, you respond: you let life bring you something and listen to your body's answer. A true yes comes as a sound before thought, \"uh-huh\", or as a rush of energy to move. An \"uhn-uh\" or a flat feeling is a no, even if your head has good reasons.",
+        "Second, before you act, you inform the people your action will touch. Because you move so fast, others may be surprised or feel left behind. Imagine you decide to change your plans for the weekend: one short message to your family, and they stop resisting and can move with you. Then your speed becomes a gift for everyone, not a shock."
+      ],
+      "signatureName": "Satisfaction and peace",
+      "signature": "Satisfaction and peace are your signs that you are on your path. Satisfaction comes when your energy goes into what your body said yes to, and you end the day pleasantly tired. Peace comes when the people around you know where you are going, so nothing pulls you back. Together they feel like flow: fast, light and yours.",
+      "notSelfName": "Frustration and anger",
+      "notSelf": "Frustration and anger are the opposite sign. Frustration comes when you start from your head and the energy doesn't come, or when things stall. Anger comes when people push back because you moved without telling them. When you feel impatient and irritated, take it as a gentle navigator: a moment to slow down, come back to your body's response, and let people know what you are doing."
+    },
+
+    "manifestor": {
+      "type": [
+        "You are a Manifestor, the one who pushes the first domino. Only about 9 out of 100 people are Manifestors. You are made to initiate: to start something new from nothing, to bring change, to set things in motion that others then continue. You don't need to wait for anything outside to begin. The impulse comes from within you.",
+        "Your aura is closed and strong. It protects your independence and gives you the space to act on your own. People feel this power. Some admire it, some feel a little uneasy around it, because they can't predict what you will do next. This is why the world sometimes tries to control you or slow you down.",
+        "Your natural role is to start change. You can move things that were stuck for years, break old patterns and open a door others didn't see. You work in bursts: a strong wave of energy to start, then a need to rest. You are made to launch things, and it is natural for you to hand them over to others to keep them going."
+      ],
+      "strategyName": "To inform before you act",
+      "strategy": [
+        "Your strategy is to inform before you act. It is not asking for permission: you don't need anyone's approval. It is simply letting the people your action will touch know what you are going to do. For a Manifestor, this small step changes everything around you.",
+        "Imagine you decide to move to another city. If your family hears about it only after you have packed, they feel shocked and try to stop you. If you tell them first, \"I'm going to move, here is my plan\", they may still have feelings, but they stop fighting you. Informing clears your way, so your energy goes into creating, not into fighting resistance."
+      ],
+      "signatureName": "Peace",
+      "signature": "Peace is your sign that you are on your path. It is the calm inside when nothing and no one is pushing against you, and you are free to follow your own impulses. You feel it when the people around you are informed and at ease with your moves, so you can create and influence without conflict.",
+      "notSelfName": "Anger",
+      "notSelf": "Anger is the opposite sign. It comes when you act without letting others know, people resist or try to control you, and you hit walls again and again. You may let anger out, or hold it inside your body. Anger is not something bad in you. It is a gentle navigator: it tells you to come back to informing, so your path can open again."
+    },
+
+    "projector": {
+      "type": [
+        "You are a Projector, like a beam of light that sees deep into another person. About 2 out of 10 people are Projectors. You are not built for constant hard work at the same pace as the energy types around you. You are built to see, to understand and to guide: how people work, how systems work, and how energy can be used wisely.",
+        "Your aura is focused and penetrating. It doesn't spread across a room. It reaches one person at a time and touches who they really are. People feel truly seen by you. Some love it, some feel a little under a magnifying glass. This is how you notice hidden talents, what isn't working, and the exact question that helps someone move forward.",
+        "Your natural role is to guide, organize and direct. You can build systems, bring the right people together and share resources wisely. Rest is part of your design, not a weakness. The energy of Generators around you can lift you like an energy drink, and it isn't your own. So you need time alone to let it go and recover."
+      ],
+      "strategyName": "Wait for the invitation",
+      "strategy": [
+        "Your strategy is to wait for the invitation. For the big things in life, like work, relationships, a partnership or a place to live, you wait until someone recognises your value and invites you in. Your guidance is powerful, and it lands only when it is welcome.",
+        "Imagine you see exactly how a friend could solve a problem. If you tell them without being asked, they may brush it off, even if you are completely right. If they ask, \"What do you think?\", the same words can change their life. While you wait, you study, you deepen what you love, and you let your gift be seen. The right invitations come to those who know their subject."
+      ],
+      "signatureName": "Success",
+      "signature": "Success is your sign that you are on your path. For you, it isn't about working harder than everyone else. It is the deep feeling of being recognised and invited, of your gift to guide being truly needed. You feel it when people come to you, listen and say thank you. Then your energy is light, and you feel in harmony with the world.",
+      "notSelfName": "Bitterness",
+      "notSelf": "Bitterness is the opposite sign. It comes when you give guidance nobody asked for, try to prove your worth by keeping up with others, or stay where you are not seen. You may feel used, tired and invisible. Bitterness is not a judgement of you. It is a gentle navigator: it shows that your gift is going to the wrong place, and turns you towards those who truly value you."
+    },
+
+    "reflector": {
+      "type": [
+        "You are a Reflector, like the Moon, which reflects the light around it and does not make its own. Only about 1 in 100 people is a Reflector. All your energy centers are open. This means you take in the world around you, experience it deeply, and reflect it back. You are never quite the same from one day to the next, and that is your nature.",
+        "Your aura samples and reflects. It touches everyone around you lightly, takes a gentle taste of them and doesn't hold on to it. Like a mirror, you show people how they really are, and how healthy a family, a team or a place is. This is why the people and places around you matter so much: in a good environment, you shine.",
+        "Your natural role is to be a mirror and a barometer for others. You notice what is truly fresh and unique, and what has become grey and stuck. When people listen to you, you can tell them the truth about their community that no one else sees. The energy of Generators around you can lift you like an energy drink, and it isn't your own, so you need time alone to release it."
+      ],
+      "strategyName": "Wait a lunar cycle",
+      "strategy": [
+        "Your strategy is to wait a lunar cycle before big decisions. The Moon moves through your whole chart in about 28 days, and during that time you live through many different states. One decision can feel bright on Monday and heavy on Thursday. Only after the full cycle do you know what is truly yours.",
+        "Imagine you are offered a new job. Instead of answering right away, you give it about a month. You talk it over with people you trust and notice how it feels on different days, in different moods. By the end, the answer is simply clear. Small everyday choices don't need this wait. The lunar cycle is for the decisions that shape your life."
+      ],
+      "signatureName": "Surprise",
+      "signature": "Surprise is your sign that you are on your path. It is the delight you feel when life shows you something truly new and unique, and you look at the world with wonder. You feel it when you are in the right place, among the right people, and free to be different every day.",
+      "notSelfName": "Disappointment",
+      "notSelf": "Disappointment is the opposite sign. It comes when you try to be fixed and predictable, rush big decisions, or take other people's feelings and thoughts as your own. Life starts to feel grey and the same, and the magic fades. Disappointment is a gentle navigator: it points you back to your environment and to giving yourself time."
+    }
+  },
+
+  "authorities": {
+    "emotional": {
+      "name": "Emotional authority",
+      "text": [
+        "You have emotional authority. Inside you, emotions move in waves: up to hope and excitement, down to doubt and heaviness, and back again. This is not a problem to fix. It is how you are made. But it means there is no truth for you in the moment. At the top of the wave, everything looks like a yes. At the bottom, the same thing looks like a no.",
+        "Clarity comes with time. When something important comes up, you give it a night, or a few days, and notice how you feel about it in different moods. Imagine you are offered a trip that sounds wonderful today. Tomorrow it may feel like too much, and the day after, simply calm and right. That calm, steady feeling, when the wave has settled, is your real answer."
+      ]
+    },
+    "sacral": {
+      "name": "Sacral authority",
+      "text": [
+        "You have sacral authority. Your truth lives in your body, in the present moment. When life asks you something, your body answers before your mind does, with a sound: \"uh-huh\" for yes, \"uhn-uh\" for no. Sometimes it is a rush of energy to move, sometimes a feeling of closing.",
+        "Your head can always find good reasons, for and against. Your body doesn't need reasons. It simply knows whether there is energy for this or not. It works best with simple yes-or-no questions. Ask a friend to ask you, \"Do you want to go to this meeting?\", and listen to the sound that comes out. Trusting it takes practice, and it becomes your most reliable compass."
+      ]
+    },
+    "splenic": {
+      "name": "Splenic authority",
+      "text": [
+        "You have splenic authority. Your truth comes as a quiet, instant knowing in the present moment: this is safe for me, or it isn't. It is your intuition, an ancient sense that cares about your health and well-being right now. It may come as a feeling, a slight chill, a pull towards something or a sense of caution.",
+        "This voice speaks only once, and it speaks softly. If you wait and start to think it over, it fades, and your mind or your fear takes over. Imagine you walk into a room and something tells you, gently, \"not here\". Later your mind may argue, but that first quiet signal was yours. Trusting it, in the moment, is how you take care of yourself."
+      ]
+    },
+    "ego": {
+      "name": "Heart authority",
+      "text": [
+        "You have heart authority, also called ego authority. Your truth lives in your will: in what you really want, and in whether you have the energy to give your word. Your heart is the center of promises and of your own worth. When you truly want something, you have the power to make it happen.",
+        "To decide, you ask yourself, \"Do I want this? What's in it for me?\", and listen to your answer. A clear \"I want this\" is a yes. If there is no real want inside, it is a no, however good it looks. Saying out loud what you want, even to yourself, helps you hear it. Promises made without real will drain you fast, so your yes is precious."
+      ]
+    },
+    "ego_projected": {
+      "name": "Heart authority",
+      "text": [
+        "You have heart authority, in the way it works for Projectors. Your truth lives in your will: in what you really want for yourself. It speaks through your voice, when you are recognised and invited and someone asks what you think.",
+        "When an invitation comes, ask yourself out loud, \"What do I want here? Is this good for me?\", and listen to what you say. A clear \"I want this\" is a yes. If there is no real want in your words, it is a no, however flattering the invitation. Your own worth matters here: you deserve invitations where you are truly valued."
+      ]
+    },
+    "self_projected": {
+      "name": "Self-projected authority",
+      "text": [
+        "You have self-projected authority. Your truth lives in your own voice. When you speak freely about something that matters to you, you hear your direction in your own words. It doesn't come from thinking quietly in your head: in silence, clarity is harder to find. It comes when you talk.",
+        "Find people you trust and ask them simply to listen. You don't need their advice or opinion. They are your mirror. Imagine you are deciding whether to change your work. You talk about it with a friend over tea, and suddenly you hear yourself say, \"I think I'm ready to leave.\" That's it. Your voice knew before your mind did."
+      ]
+    },
+    "mental": {
+      "name": "Mental authority",
+      "text": [
+        "You have mental, or environmental, authority. There is no single center in your body that decides for you. Your clarity comes from the right environment and from talking things through. Where you are and who you are with deeply affect how clearly you see.",
+        "When a decision matters, talk it over with different people you trust, at different times, in places where you feel good. They are your sounding board, not your advisors. Notice what you keep saying, again and again, in your own words. That repeated pattern is your answer. It takes time: clarity comes through several conversations, not one."
+      ]
+    },
+    "lunar": {
+      "name": "Lunar authority",
+      "text": [
+        "You have lunar authority, the authority of Reflectors. Your clarity comes with time, following the Moon. Over about 28 days, the Moon moves through your whole chart, and you experience a decision from many different sides and moods.",
+        "For important decisions, you give yourself this full cycle. You talk it over with people you trust, notice how it feels on different days, and let it ripen. At the end of the cycle, you simply know. Decisions made in a rush often don't feel right later. This is not slowness. It is how your wisdom works."
+      ]
+    }
+  },
+
+  "profileLineLabels": {
+    "conscious": "conscious, how you know yourself",
+    "unconscious": "unconscious, how others often see you"
+  },
+
+  "lines": {
+    "1": {
+      "name": "The Investigator",
+      "text": "You need a solid foundation to feel safe. Before you act, you want to understand: to read, to study, to get to the bottom of things. When you know enough, you feel confident and steady, and others can rely on your knowledge. When the ground under you is shaky, uncertainty comes. So your research is not a delay. It is what makes you strong."
+    },
+    "2": {
+      "name": "The Hermit",
+      "text": "You have a natural talent that you often don't notice yourself, because to you it seems obvious. You need time alone, in your own space, doing your own thing. And from time to time someone calls you out: \"You're good at this, come and do it with us.\" These calls open your gift to the world. Time for yourself is not laziness. It is how your talent ripens."
+    },
+    "3": {
+      "name": "The Experimenter",
+      "text": "You learn through your own experience: by trying, bumping into things and finding what works. Not everything works the first time, and that is exactly your way of learning. Every \"this didn't work\" is valuable information, not a failure. Over time you become someone who knows what really works in real life, because you have tested it yourself."
+    },
+    "4": {
+      "name": "The Networker",
+      "text": "Your life opens through people. Opportunities, work and even love come through those you already know: friends, colleagues, your trusted circle. You are warm and generous with your people, and you need a stable base, a sense of where you belong. Your strength is in relationships built on trust, so your circle is your real wealth."
+    },
+    "5": {
+      "name": "The Heretic",
+      "text": "People project onto you: they see in you someone who can solve their problem, often before they really know you. When you bring a practical solution, your reputation grows. When expectations are too high, they can turn against you. So it helps to be clear about what you can and cannot do. Your gift is practical help, offered honestly."
+    },
+    "6": {
+      "name": "The Role Model",
+      "text": "Your life tends to move in three stages. Until about 30, you learn through experience, with many trials. From about 30 to 50, you step back, watch life from a distance and gather wisdom. After 50, you become a living example for others. You look for what is truly right and real, in work and in love, and people trust you because you live what you say."
+    }
+  },
+
+  "profiles": {
+    "1/3": "Your profile brings together deep knowledge and real experience. Consciously, you want to understand things to the bottom and stand on solid ground. In your body, you learn by trying: experimenting, making mistakes and adapting. Together this makes you an expert who practises: someone who has both studied the subject and tested it in real life. Your honesty about what didn't work is part of your strength.",
+    "1/4": "Your profile brings together deep knowledge and close relationships. Consciously, you study your subject until you feel confident and grounded. In your body, you are a person of your circle: you share what you know with friends and people you trust, and your opportunities come through them. You are a foundation for your people, and your knowledge reaches the world through friendship.",
+    "2/4": "Your profile brings together natural talent and the warmth of your circle. Consciously, you are a hermit: you love your own space and time to do things your way. In your body, you are connected to people: friends and acquaintances keep calling you out to share your gift. You don't need to shout about yourself. The right people come to you through those who already know you.",
+    "2/5": "Your profile brings together a hidden gift and the way others see you. Consciously, you love your own space and do things naturally, often without noticing how good you are. In your body, you carry other people's projections: in hard moments, they see you as the one who can save the day. When you answer the right calls, well prepared, your gift becomes truly useful and your good name grows.",
+    "3/5": "Your profile is the practical pioneer. Consciously, you learn by trying: experiments, mistakes and new attempts are your way. In your body, you carry other people's projections: they see you as someone who can solve their problems. Your real-life experience becomes your strength. You know what truly works because you have lived it, and you can offer people practical solutions, in life and in business.",
+    "3/6": "Your profile brings together rich experience and deep wisdom. Consciously, you learn by trying, and life brings you many experiments. In your body, you carry the Role Model's path: years of experience, then a time of stepping back to watch life from a distance, and later becoming an example for others. Every turn of your path becomes wisdom you can share.",
+    "4/1": "Yours is a rare profile with a steady, fixed path. Consciously, you are a person of your circle: your life moves through friends and people you trust. In your body, there is a deep need for a solid foundation of knowledge. You stand firmly on what you know, and you influence the world through your trusted people, calmly and reliably.",
+    "4/6": "Your profile brings together warm relationships and the Role Model's path. Consciously, your life opens through people: friends, colleagues and your trusted circle. In your body, you carry three stages of life: learning through experience when young, then stepping back to gain wisdom, and finally becoming an example others look up to. People trust you because they know you.",
+    "5/1": "Your profile brings together other people's expectations and deep knowledge. Consciously, you feel how people see you: as a leader who can solve their problem. In your body, you need a solid foundation, research and preparation. When your answers stand on real knowledge, you meet those expectations with ease, and your reputation grows through real results.",
+    "5/2": "Your profile brings together other people's expectations and a natural gift. Consciously, you notice how people see you as someone who can help or lead. In your body, you are a hermit: you long for peace, your own space and time alone. Your talent opens fully when the right call comes from outside. Then your natural knowing can change other people's lives.",
+    "6/2": "Your profile brings together the Role Model's path and natural talent. Consciously, you live in three stages: trying many things when young, stepping back to watch life between about 30 and 50, and later becoming a calm, trusted example. In your body, you are a hermit with an inborn gift, and you need time alone. People look to you because you live what you say.",
+    "6/3": "Your profile brings together the Role Model's wisdom and a life full of experience. Consciously, you move towards becoming an example for others. In your body, you learn by trying: life keeps changing, you start and end things, adapt and try again. Through all of it you grow deep wisdom, inner strength and a real love of life, and you show others the way by having walked it."
+  }
+}
