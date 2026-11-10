@@ -22,6 +22,7 @@ const ALLOWED_ORIGINS = (process.env.WEB_ALLOWED_ORIGINS || 'http://localhost:30
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
+const PREVIEW_ORIGIN_RE = /^https:\/\/[a-z0-9-]+\.natalia-site-f18\.pages\.dev$/;
 const DAILY_THD_LIMIT = Number(process.env.WEB_DAILY_THD_LIMIT || 300);
 const NEW_CHARTS_PER_IP_PER_HOUR = Number(process.env.WEB_NEW_CHARTS_PER_IP_PER_HOUR || 8);
 const REQUESTS_PER_IP_PER_HOUR = Number(process.env.WEB_REQUESTS_PER_IP_PER_HOUR || 60);
@@ -29,7 +30,8 @@ const REQUESTS_PER_IP_PER_HOUR = Number(process.env.WEB_REQUESTS_PER_IP_PER_HOUR
 // ---- CORS (only the website's own address) ----
 router.use((req, res, next) => {
   const origin = req.headers.origin;
-  const allowed = origin && ALLOWED_ORIGINS.includes(origin);
+  // Also the site's own preview copies on Cloudflare Pages (e.g. redesign.natalia-site-f18.pages.dev).
+  const allowed = origin && (ALLOWED_ORIGINS.includes(origin) || PREVIEW_ORIGIN_RE.test(origin));
   if (allowed) {
     res.set('Access-Control-Allow-Origin', origin);
     res.set('Vary', 'Origin');
@@ -432,5 +434,120 @@ router.post('/waitlist', async (req, res) => {
   }
 });
 
+// ===========================================================================
+// Paid readings through LiqPay (11.11.2026). See src/webOrders.js.
+// ===========================================================================
+const webOrders = require('../webOrders');
+
+const ORDERS_PER_IP_PER_HOUR = Number(process.env.WEB_ORDERS_PER_IP_PER_HOUR || 10);
+const REF_RE = /^NP-\d{8}-[A-Z2-9]{4}$/;
+
+// ---- POST /web/order — the order form. Saves the order and returns what LiqPay's page needs. ----
+router.post('/order', async (req, res) => {
+  const ip = clientIp(req);
+  if (overLimit(`order:${ip}`, ORDERS_PER_IP_PER_HOUR)) {
+    return res.status(429).json({ error: 'too_many_requests' });
+  }
+  const b = req.body || {};
+  if (b.website) return res.status(400).json({ error: 'bad_order' }); // bot trap
+  if (!webOrders.keys()) return res.status(503).json({ error: 'payments_not_configured' });
+
+  const checked = webOrders.validateOrder(b, cleanEmail);
+  if (checked.error) return res.status(400).json({ error: checked.error });
+  const o = checked.order;
+
+  // Where to send the person back after paying: the same site they came from.
+  const origin = req.headers.origin;
+  const siteOrigin = origin && (ALLOWED_ORIGINS.includes(origin) || PREVIEW_ORIGIN_RE.test(origin)) ? origin : webOrders.SITE_URL;
+
+  try {
+    let ref = null;
+    for (let attempt = 0; attempt < 5 && !ref; attempt++) {
+      const candidate = webOrders.newRef();
+      const r = await pool.query(
+        `INSERT INTO orders (order_ref, lang, topic, format, amount, currency, client_name, email, reading_lang,
+                             details, consent_text, policy_version)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         ON CONFLICT (order_ref) DO NOTHING RETURNING order_ref`,
+        [candidate, o.lang, o.topic, o.format, o.amount, o.currency, o.name, o.email, o.readingLang,
+          JSON.stringify(o.details), o.consentText, webOrders.POLICY_VERSION]
+      );
+      if (r.rows.length) ref = r.rows[0].order_ref;
+    }
+    if (!ref) throw new Error('could not create a unique order number');
+
+    const checkout = webOrders.checkoutFields(o, ref, siteOrigin);
+    return res.json({ orderRef: ref, amount: o.amount, currency: o.currency, checkout });
+  } catch (err) {
+    console.error('[web/order] failed:', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// ---- GET /web/order-status?ref=NP-... — for the thank-you page. No personal data. ----
+router.get('/order-status', async (req, res) => {
+  const ref = String(req.query.ref || '');
+  if (!REF_RE.test(ref)) return res.status(400).json({ error: 'bad_ref' });
+  try {
+    const r = await pool.query('SELECT status, topic, format FROM orders WHERE order_ref = $1', [ref]);
+    if (!r.rows.length) return res.status(404).json({ error: 'not_found' });
+    return res.json(r.rows[0]);
+  } catch (err) {
+    console.error('[web/order-status] failed:', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// ---- POST /web/liqpay/callback — LiqPay tells us about a payment (server to server). ----
+// Form fields: data (base64 JSON), signature. Nothing is trusted until the signature is checked.
+router.post('/liqpay/callback', express.urlencoded({ extended: false, limit: '64kb' }), async (req, res) => {
+  const payment = webOrders.readCallback(req.body && req.body.data, req.body && req.body.signature);
+  if (!payment) {
+    console.warn('[web/liqpay] callback with a wrong signature ignored');
+    return res.status(400).send('bad signature');
+  }
+  const ref = String(payment.order_id || '');
+  try {
+    const found = await pool.query('SELECT * FROM orders WHERE order_ref = $1', [ref]);
+    if (!found.rows.length) {
+      console.warn('[web/liqpay] unknown order', ref);
+      return res.status(200).send('ok');
+    }
+    const order = found.rows[0];
+    let next = webOrders.statusFrom(payment.status);
+    // A payment counts only if the sum and currency are exactly what we asked for.
+    if (next === 'paid' && (Number(payment.amount) !== Number(order.amount) || payment.currency !== order.currency)) {
+      console.error('[web/liqpay] amount mismatch', ref, payment.amount, payment.currency);
+      next = null;
+    }
+    const updated = await pool.query(
+      `UPDATE orders SET liqpay_status = $2, liqpay_payment_id = $3, liqpay_data = $4,
+              status = COALESCE($5, status),
+              paid_at = CASE WHEN $5 = 'paid' AND paid_at IS NULL THEN now() ELSE paid_at END
+       WHERE order_ref = $1 RETURNING *`,
+      [ref, String(payment.status || ''), payment.payment_id ? String(payment.payment_id) : null, JSON.stringify(payment), next]
+    );
+    const row = updated.rows[0];
+
+    if (row.status === 'paid' && !row.emails_sent_at) {
+      // Claim the letters first, so a repeated callback never sends them twice.
+      const claim = await pool.query(
+        'UPDATE orders SET emails_sent_at = now() WHERE order_ref = $1 AND emails_sent_at IS NULL RETURNING order_ref',
+        [ref]
+      );
+      if (claim.rows.length) {
+        const toClient = webOrders.clientLetter(row);
+        const toNataly = webOrders.natalyLetter(row);
+        webReading.sendEmail({ to: row.email, ...toClient }).catch((err) => console.error('[web/liqpay] client letter failed:', ref, err.message));
+        webReading.sendEmail({ to: webOrders.ORDERS_NOTIFY_EMAIL, ...toNataly }).catch((err) => console.error('[web/liqpay] Nataly letter failed:', ref, err.message));
+      }
+    }
+    return res.status(200).send('ok');
+  } catch (err) {
+    console.error('[web/liqpay] callback failed:', err);
+    return res.status(500).send('error');
+  }
+});
+
 module.exports = router;
-module.exports._test = { cleanInput, typeKey, authorityKey, profileKey, publicChart, cleanEmail, cleanName };
+module.exports._test ={ cleanInput, typeKey, authorityKey, profileKey, publicChart, cleanEmail, cleanName };
