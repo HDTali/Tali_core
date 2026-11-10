@@ -18,6 +18,7 @@ const CORE_URL = (process.env.WEB_CORE_URL || 'https://tali-core-identity-billin
 const CONTACT_EMAIL = process.env.WEB_CONTACT_EMAIL || 'hello@natalypopovych.com';
 const ORDERS_NOTIFY_EMAIL = process.env.WEB_ORDERS_EMAIL || CONTACT_EMAIL;
 const CHECKOUT_URL = 'https://www.liqpay.ua/api/3/checkout';
+const TELEGRAM_URL = process.env.WEB_TELEGRAM_URL || 'https://t.me/Natalia_Popovych';
 const POLICY_VERSION = '2026-11-11';
 
 const TOPICS = ['work', 'energy', 'self', 'relationships', 'couple', 'child', 'family'];
@@ -121,13 +122,14 @@ function validateOrder(b, cleanEmail) {
   if (b.format === 'audio' && situation.length < 3) return { error: 'situation_required' };
   const questions = (Array.isArray(b.questions) ? b.questions : []).slice(0, 3).map((q) => cleanText(q, 600)).filter(Boolean);
   const note = cleanText(b.note, 2000);
+  const messenger = cleanText(b.messenger, 80); // Telegram username or WhatsApp number, optional
 
   const currency = currencyFor(lang);
   return {
     order: {
       lang, topic: b.topic, format: b.format, name, email, readingLang, currency,
       amount: priceFor(b.topic, b.format, currency),
-      details: { persons, situation: situation || null, questions, note: note || null },
+      details: { persons, situation: situation || null, questions, note: note || null, messenger: messenger || null },
       consentText: CONSENT_TEXTS[lang],
     },
   };
@@ -238,8 +240,10 @@ function clientLetter(row) {
     ru: { subject: `Заказ ${row.order_ref} оплачен`, hello: `Здравствуй, ${esc(row.client_name)}!`, thanks: `Спасибо! Оплата прошла. Номер твоего заказа: <b>${esc(row.order_ref)}</b>.`, reply: 'Если есть вопросы, просто ответь на это письмо.', bye: 'С теплом,<br>Натали' },
     en: { subject: `Order ${row.order_ref} is paid`, hello: `Hi ${esc(row.client_name)},`, thanks: `Thank you! Your payment went through. Your order number is <b>${esc(row.order_ref)}</b>.`, reply: 'If you have any questions, just reply to this email.', bye: 'With warmth,<br>Nataly' },
   }[L];
-  const paragraphs = [t.hello, t.thanks, esc(what), NEXT[L][row.format], t.reply, t.bye];
-  const text = [t.hello, t.thanks.replace(/<[^>]+>/g, ''), what, NEXT[L][row.format], t.reply, t.bye.replace('<br>', '\n')].join('\n\n');
+  const tg = `<a href="${TELEGRAM_URL}" style="color:#765B37">Telegram</a>`;
+  const chat = { uk: `Якщо зручніше в месенджері, пиши мені в ${tg}.`, ru: `Если удобнее в мессенджере, пиши мне в ${tg}.`, en: `If a messenger is easier for you, write to me on ${tg}.` }[L];
+  const paragraphs = [t.hello, t.thanks, esc(what), NEXT[L][row.format], t.reply, chat, t.bye];
+  const text = [t.hello, t.thanks.replace(/<[^>]+>/g, ''), what, NEXT[L][row.format], t.reply, chat.replace(/<[^>]+>/g, '') + ' ' + TELEGRAM_URL, t.bye.replace('<br>', '\n')].join('\n\n');
   return { subject: t.subject, paragraphs, text };
 }
 
@@ -251,6 +255,7 @@ function natalyLetter(row) {
     `<b>${esc(row.order_ref)}</b> оплачен${row.liqpay_status === 'sandbox' ? ' (ТЕСТ, без реальных денег)' : ''}`,
     `${esc(NAMES.topic.ru[row.topic])} · ${esc(NAMES.format.ru[row.format])} · ${esc(money(row.amount, row.currency))}`,
     `Клиент: ${esc(row.client_name)}, <a href="mailto:${esc(row.email)}">${esc(row.email)}</a>`,
+    ...(d.messenger ? [`Мессенджер для связи: ${esc(d.messenger)}`] : []),
     `Язык сайта: ${LANG_RU[row.lang]} · язык разбора: ${LANG_RU[row.reading_lang] || esc(row.reading_lang)}`,
   ];
   for (const p of d.persons || []) {
