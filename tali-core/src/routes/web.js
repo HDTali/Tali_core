@@ -529,6 +529,14 @@ router.post('/liqpay/callback', express.urlencoded({ extended: false, limit: '64
     );
     const row = updated.rows[0];
 
+    // Payment stuck "in progress" (first message about it) or failed: tell Nataly so she can contact the person.
+    const notice = !next && !order.liqpay_status ? 'pending' : row.status === 'failed' && order.status !== 'failed' ? 'failed' : null;
+    if (notice) {
+      webReading
+        .sendEmail({ to: webOrders.ORDERS_NOTIFY_EMAIL, ...webOrders.natalyNotice(row, notice) })
+        .catch((err) => console.error('[web/liqpay] notice failed:', ref, err.message));
+    }
+
     if (row.status === 'paid' && !row.emails_sent_at) {
       // Claim the letters first, so a repeated callback never sends them twice.
       const claim = await pool.query(

@@ -320,7 +320,22 @@ function natalyLetter(row) {
   };
 }
 
+/** To Nataly when a payment is stuck "in progress" or failed, so she can contact the person. */
+function natalyNotice(row, kind) {
+  const base = natalyLetter(row);
+  const head = kind === 'failed'
+    ? `<b>Оплата НЕ прошла</b> (${esc(row.liqpay_status)}). Можно написать клиенту и предложить оплатить ещё раз.`
+    : `<b>Оплата в ожидании</b> (${esc(row.liqpay_status)}). Банк ещё не подтвердил платёж: так бывает с иностранными картами. Если подтверждение придёт, клиент и ты получите обычные письма об оплате. Если нет, напиши клиенту.`;
+  const tag = kind === 'failed' ? '[Оплата не прошла]' : '[Оплата в ожидании]';
+  return {
+    subject: `${tag} ${row.order_ref}: ${NAMES.topic.ru[row.topic]} · ${NAMES.format.ru[row.format]}`,
+    paragraphs: [head, ...base.paragraphs.slice(1)],
+    text: [head.replace(/<[^>]+>/g, ''), ...base.text.split('\n\n').slice(1)].join('\n\n'),
+  };
+}
+
 module.exports = {
+  natalyNotice,
   POLICY_VERSION,
   ORDERS_NOTIFY_EMAIL,
   SITE_URL,
