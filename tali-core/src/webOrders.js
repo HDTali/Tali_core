@@ -24,6 +24,8 @@ const INSTAGRAM_URL = 'https://www.instagram.com/popovych_human_design/';
 const YOUTUBE_URL = 'https://www.youtube.com/@NewEraHuman';
 // WhatsApp Business number: set WEB_WHATSAPP_URL (e.g. https://wa.me/380...) in Render when it's ready.
 const WHATSAPP_URL = process.env.WEB_WHATSAPP_URL || '';
+// Nataly's Google Calendar booking page (one 90-minute schedule for every live session).
+const BOOKING_URL = process.env.WEB_BOOKING_URL || 'https://calendar.app.google/N3zHauoGkG7ZuoSM7';
 const POLICY_VERSION = '2026-11-11';
 
 const TOPICS = ['work', 'energy', 'self', 'relationships', 'couple', 'child', 'family'];
@@ -239,6 +241,28 @@ const NEXT = {
   },
 };
 
+/** What happens next, as HTML and as plain text. Live sessions get the booking link. */
+function nextStep(row) {
+  const L = row.lang;
+  if (row.format !== 'video') return { html: NEXT[L][row.format], text: NEXT[L][row.format] };
+  const a = `<a href="${BOOKING_URL}" style="color:#765B37">`;
+  const ref = esc(row.order_ref);
+  const book = {
+    uk: [`Обери зручний час для зустрічі в Zoom у ${a}моєму календарі</a>. У формі вкажи номер замовлення ${ref}. Посилання на Zoom прийде в листі з підтвердженням.`, 'Обери зручний час для зустрічі в Zoom у моєму календарі'],
+    ru: [`Выбери удобное время для встречи в Zoom в ${a}моём календаре</a>. В форме укажи номер заказа ${ref}. Ссылка на Zoom придёт в письме с подтверждением.`, 'Выбери удобное время для встречи в Zoom в моём календаре'],
+    en: [`Please choose a convenient time for our Zoom session in ${a}my calendar</a>. In the form, enter your order number ${ref}. The Zoom link will come in the confirmation email.`, 'Please choose a convenient time for our Zoom session in my calendar'],
+  }[L];
+  const length = row.topic === 'child'
+    ? { uk: 'Зустріч триває 1 годину.', ru: 'Встреча длится 1 час.', en: 'The session lasts 1 hour.' }[L]
+    : TOGETHER.includes(row.topic)
+      ? { uk: 'Зустріч триває 2 години: після бронювання я сама подовжу запис.', ru: 'Встреча длится 2 часа: после бронирования я сама продлю запись.', en: "The session lasts 2 hours: after you book, I'll extend the time myself." }[L]
+      : '';
+  return {
+    html: [book[0], length].filter(Boolean).join(' '),
+    text: [`${book[1]}: ${BOOKING_URL} (${row.order_ref}).`, length].filter(Boolean).join(' '),
+  };
+}
+
 function clientLetter(row) {
   const L = row.lang;
   const what = `${NAMES.topic[L][row.topic]} · ${NAMES.format[L][row.format]} · ${money(row.amount, row.currency)}`;
@@ -259,9 +283,10 @@ function clientLetter(row) {
     : [['Instagram', INSTAGRAM_URL], [L === 'uk' ? 'Telegram-канал' : 'Telegram-канал', TELEGRAM_CHANNEL_URL], ['YouTube', YOUTUBE_URL]];
   const follow = { uk: 'Мої соцмережі', ru: 'Мои соцсети', en: 'Follow me' }[L];
   const followHtml = `${follow}: ${socials.map(([n, u]) => link(u, n)).join(' · ')}`;
-  const paragraphs = [t.hello, t.thanks, esc(what), NEXT[L][row.format], t.reply, chat, followHtml, t.bye];
+  const next = nextStep(row);
+  const paragraphs = [t.hello, t.thanks, esc(what), next.html, t.reply, chat, followHtml, t.bye];
   const text = [
-    t.hello, t.thanks.replace(/<[^>]+>/g, ''), what, NEXT[L][row.format], t.reply,
+    t.hello, t.thanks.replace(/<[^>]+>/g, ''), what, next.text, t.reply,
     `${chat.replace(/<[^>]+>/g, '')} ${TELEGRAM_URL}${WHATSAPP_URL ? ` ${WHATSAPP_URL}` : ''}`,
     `${follow}: ${socials.map(([n, u]) => `${n} ${u}`).join(' · ')}`,
     t.bye.replace('<br>', '\n'),
