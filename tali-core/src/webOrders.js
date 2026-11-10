@@ -19,6 +19,11 @@ const CONTACT_EMAIL = process.env.WEB_CONTACT_EMAIL || 'hello@natalypopovych.com
 const ORDERS_NOTIFY_EMAIL = process.env.WEB_ORDERS_EMAIL || CONTACT_EMAIL;
 const CHECKOUT_URL = 'https://www.liqpay.ua/api/3/checkout';
 const TELEGRAM_URL = process.env.WEB_TELEGRAM_URL || 'https://t.me/Natalia_Popovych';
+const TELEGRAM_CHANNEL_URL = 'https://t.me/hd_popovych';
+const INSTAGRAM_URL = 'https://www.instagram.com/popovych_human_design/';
+const YOUTUBE_URL = 'https://www.youtube.com/@NewEraHuman';
+// WhatsApp Business number: set WEB_WHATSAPP_URL (e.g. https://wa.me/380...) in Render when it's ready.
+const WHATSAPP_URL = process.env.WEB_WHATSAPP_URL || '';
 const POLICY_VERSION = '2026-11-11';
 
 const TOPICS = ['work', 'energy', 'self', 'relationships', 'couple', 'child', 'family'];
@@ -33,6 +38,7 @@ const PEOPLE = {
 const PRICES = {
   personal: { pdf: { USD: 49, UAH: 2250 }, audio: { USD: 99, UAH: 4500 }, video: { USD: 199, UAH: 9050 } },
   together: { pdf: { USD: 99, UAH: 4500 }, audio: { USD: 199, UAH: 9050 }, video: { USD: 299, UAH: 13600 } },
+  child: { pdf: { USD: 49, UAH: 2250 }, audio: { USD: 79, UAH: 3600 }, video: { USD: 149, UAH: 6800 } },
 };
 
 function currencyFor(lang) {
@@ -40,7 +46,8 @@ function currencyFor(lang) {
 }
 
 function priceFor(topic, format, currency) {
-  return PRICES[TOGETHER.includes(topic) ? 'together' : 'personal'][format][currency];
+  const group = topic === 'child' ? 'child' : TOGETHER.includes(topic) ? 'together' : 'personal';
+  return PRICES[group][format][currency];
 }
 
 // ---- Names shown in letters and on LiqPay's page ----
@@ -240,10 +247,25 @@ function clientLetter(row) {
     ru: { subject: `Заказ ${row.order_ref} оплачен`, hello: `Здравствуй, ${esc(row.client_name)}!`, thanks: `Спасибо! Оплата прошла. Номер твоего заказа: <b>${esc(row.order_ref)}</b>.`, reply: 'Если есть вопросы, просто ответь на это письмо.', bye: 'С теплом,<br>Натали' },
     en: { subject: `Order ${row.order_ref} is paid`, hello: `Hi ${esc(row.client_name)},`, thanks: `Thank you! Your payment went through. Your order number is <b>${esc(row.order_ref)}</b>.`, reply: 'If you have any questions, just reply to this email.', bye: 'With warmth,<br>Nataly' },
   }[L];
-  const tg = `<a href="${TELEGRAM_URL}" style="color:#765B37">Telegram</a>`;
-  const chat = { uk: `Якщо зручніше в месенджері, пиши мені в ${tg}.`, ru: `Если удобнее в мессенджере, пиши мне в ${tg}.`, en: `If a messenger is easier for you, write to me on ${tg}.` }[L];
-  const paragraphs = [t.hello, t.thanks, esc(what), NEXT[L][row.format], t.reply, chat, t.bye];
-  const text = [t.hello, t.thanks.replace(/<[^>]+>/g, ''), what, NEXT[L][row.format], t.reply, chat.replace(/<[^>]+>/g, '') + ' ' + TELEGRAM_URL, t.bye.replace('<br>', '\n')].join('\n\n');
+  const link = (href, label) => `<a href="${href}" style="color:#765B37">${label}</a>`;
+  const chat = {
+    uk: `Якщо зручніше в месенджері, пиши мені в ${link(TELEGRAM_URL, 'Telegram')}${WHATSAPP_URL ? ` або ${link(WHATSAPP_URL, 'WhatsApp')}` : ''}.`,
+    ru: `Если удобнее в мессенджере, пиши мне в ${link(TELEGRAM_URL, 'Telegram')}${WHATSAPP_URL ? ` или ${link(WHATSAPP_URL, 'WhatsApp')}` : ''}.`,
+    en: `If a messenger is easier for you, write to me on ${link(TELEGRAM_URL, 'Telegram')}${WHATSAPP_URL ? ` or ${link(WHATSAPP_URL, 'WhatsApp')}` : ''}.`,
+  }[L];
+  // Where to follow Nataly. Ukrainian and Russian readers also get Instagram and the Telegram channel.
+  const socials = L === 'en'
+    ? [['YouTube', YOUTUBE_URL]]
+    : [['Instagram', INSTAGRAM_URL], [L === 'uk' ? 'Telegram-канал' : 'Telegram-канал', TELEGRAM_CHANNEL_URL], ['YouTube', YOUTUBE_URL]];
+  const follow = { uk: 'Мої соцмережі', ru: 'Мои соцсети', en: 'Follow me' }[L];
+  const followHtml = `${follow}: ${socials.map(([n, u]) => link(u, n)).join(' · ')}`;
+  const paragraphs = [t.hello, t.thanks, esc(what), NEXT[L][row.format], t.reply, chat, followHtml, t.bye];
+  const text = [
+    t.hello, t.thanks.replace(/<[^>]+>/g, ''), what, NEXT[L][row.format], t.reply,
+    `${chat.replace(/<[^>]+>/g, '')} ${TELEGRAM_URL}${WHATSAPP_URL ? ` ${WHATSAPP_URL}` : ''}`,
+    `${follow}: ${socials.map(([n, u]) => `${n} ${u}`).join(' · ')}`,
+    t.bye.replace('<br>', '\n'),
+  ].join('\n\n');
   return { subject: t.subject, paragraphs, text };
 }
 
