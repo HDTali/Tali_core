@@ -174,7 +174,7 @@ function crossLabel(cross, lang) {
   if (!m) return cross;
   const angle = /^right/i.test(m[1]) ? 'right' : /^left/i.test(m[1]) ? 'left' : 'juxta';
   const theme = m[2].toLowerCase().trim();
-  const entry = t.crosses[theme] || t.crosses[theme.replace(/s$/, '')];
+  const entry = t.crosses[`${angle}:${theme}`] || t.crosses[theme] || t.crosses[theme.replace(/s$/, '')];
   const name = entry
     ? `${entry.name} ${t.angles[angle]}`
     : `${t.cross} ${t.angles[angle]}: ${theme.replace(/\b\w/g, (c) => c.toUpperCase())}`;
