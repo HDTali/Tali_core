@@ -312,15 +312,15 @@ function cleanName(value) {
   return name || null;
 }
 
-async function saveConsent(email, purpose) {
+async function saveConsent(email, purpose, lang = 'en') {
   await pool.query(
     'INSERT INTO consents (email, purpose, policy_version, consent_text) VALUES ($1, $2, $3, $4)',
-    [email, purpose, webReading.CONSENT_VERSION, webReading.CONSENT_TEXTS[purpose]]
+    [email, purpose, webReading.CONSENT_VERSION, webReading.consentText(purpose, lang)]
   );
 }
 
 // ---- POST /web/reading-email — "send my first reading as a PDF" ----
-// Body: { chartId, email, name?, consent: true, news?: boolean, website?: '' (bot trap) }
+// Body: { chartId, email, name?, consent: true, news?: boolean, lang?: 'en'|'uk'|'ru', website?: '' (bot trap) }
 // Answers at once; Claude + PDF + email happen in the background (about a minute).
 router.post('/reading-email', async (req, res) => {
   const ip = clientIp(req);
@@ -336,6 +336,7 @@ router.post('/reading-email', async (req, res) => {
   const chartId = String(b.chartId || '');
   if (!UUID_RE.test(chartId)) return res.status(400).json({ error: 'bad_chart' });
   const name = cleanName(b.name);
+  const lang = webReading.cleanLang(b.lang);
 
   try {
     const chart = await pool.query(
@@ -356,8 +357,8 @@ router.post('/reading-email', async (req, res) => {
       return res.status(429).json({ error: 'too_many_for_email' });
     }
 
-    await saveConsent(email, 'reading_pdf');
-    if (b.news === true) await saveConsent(email, 'news');
+    await saveConsent(email, 'reading_pdf', lang);
+    if (b.news === true) await saveConsent(email, 'news', lang);
 
     // Same people table as the Telegram bot (provider 'email'), so a future
     // web version of Tali recognises this person. The profile is created only
@@ -369,7 +370,7 @@ router.post('/reading-email', async (req, res) => {
       await pool.query(
         `INSERT INTO profiles (user_id, state, display_name, birth_date, birth_time, birth_location, lang,
                                chart_data, chart_data_full, chart_compact)
-         VALUES ($1, 'chart_ready', $2, $3, $4, $5, 'en', $6, $7, $8)
+         VALUES ($1, 'chart_ready', $2, $3, $4, $5, $9, $6, $7, $8)
          ON CONFLICT (user_id) DO NOTHING`,
         [
           userId,
@@ -380,6 +381,7 @@ router.post('/reading-email', async (req, res) => {
           JSON.stringify(wc.thd_data.chart || {}),
           JSON.stringify(wc.thd_data),
           JSON.stringify(buildChartCompact(wc.thd_data)),
+          lang === 'uk' ? 'ua' : lang, // the Telegram bot's own codes: 'ua', 'ru'
         ]
       );
     } catch (err) {
@@ -388,9 +390,9 @@ router.post('/reading-email', async (req, res) => {
     }
 
     const inserted = await pool.query(
-      `INSERT INTO reading_requests (web_chart_id, user_id, email, display_name)
-       VALUES ($1, $2, $3, $4) RETURNING id`,
-      [chartId, userId, email, name]
+      `INSERT INTO reading_requests (web_chart_id, user_id, email, display_name, lang)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [chartId, userId, email, name, lang]
     );
     webReading.enqueue(inserted.rows[0].id);
     return res.json({ ok: true });
