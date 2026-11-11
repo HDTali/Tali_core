@@ -364,28 +364,34 @@ function renderPdf({ name, birth, placeLabel, facts, reading, bodygraphPng, lang
       doc.moveDown(0.6);
     }
 
-    ensureSpace(160);
-    if (reading.closingTitle) {
-      doc.font('serif-bold').fontSize(21).fillColor(C.ink).text(reading.closingTitle, L, doc.y, { width: CW });
-      goldRule(doc.y + 5);
-      doc.y += 16;
-    }
-    for (const para of String(reading.closing).split(/\n\n/)) {
-      ensureSpace(40);
-      doc.font('serif-italic').fontSize(15).fillColor(C.ink).text(para, L, doc.y, { width: CW, lineGap: 2.5 });
-      doc.moveDown(0.6);
-    }
-    doc.moveDown(0.8);
-
-    // ---- Go deeper ----
+    // ---- Final words + Go deeper: always on one page, so the reader sees the offer right
+    // after the last words (11.11.2026). If they don't fit, both start on a new page.
     const offers = ui.offers;
     const boxPad = 22;
     const innerW = CW - boxPad * 2;
     doc.font('sans').fontSize(10);
     let boxH = boxPad * 2 + 36 + 16; // title + links line
     for (const [, text] of offers) boxH += 15 + doc.heightOfString(text, { width: innerW, lineGap: 3 }) + 12;
-    // The box, the Tali line and the disclaimer stay on one page (a lone disclaimer page looks broken).
-    ensureSpace(boxH + 70);
+    const paras = String(reading.closing).split(/\n\n/);
+    let closingH = 0;
+    if (reading.closingTitle) closingH += doc.font('serif-bold').fontSize(21).heightOfString(reading.closingTitle, { width: CW }) + 16;
+    doc.font('serif-italic').fontSize(15);
+    for (const para of paras) closingH += doc.heightOfString(para, { width: CW, lineGap: 2.5 }) + 15 * 0.6 * 1.2;
+    closingH += 15;
+    // + the Tali line and the disclaimer under the box (a lone disclaimer page looks broken).
+    ensureSpace(closingH + boxH + 70);
+
+    if (reading.closingTitle) {
+      doc.font('serif-bold').fontSize(21).fillColor(C.ink).text(reading.closingTitle, L, doc.y, { width: CW });
+      goldRule(doc.y + 5);
+      doc.y += 16;
+    }
+    for (const para of paras) {
+      doc.font('serif-italic').fontSize(15).fillColor(C.ink).text(para, L, doc.y, { width: CW, lineGap: 2.5 });
+      doc.moveDown(0.6);
+    }
+    doc.moveDown(0.4);
+    ensureSpace(boxH + 70); // safety net if the estimate above was short
     const boxY = doc.y;
     doc.save().roundedRect(L, boxY, CW, boxH, 10).fill(C.panel).restore();
     doc.save().roundedRect(L, boxY, CW, boxH, 10).lineWidth(0.8).strokeColor(C.gold).stroke().restore();
@@ -443,11 +449,11 @@ function letterHtml(paragraphs) {
   const ps = paragraphs
     .map((p) => `<p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#2A2559">${p}</p>`)
     .join('');
-  return `<!doctype html><html><body style="margin:0;background:#F7F2EA;font-family:Helvetica,Arial,sans-serif">
-<div style="max-width:560px;margin:0 auto;padding:36px 24px">
-<p style="margin:0 0 24px;font-size:11px;letter-spacing:3px;color:#765B37">NATALY POPOVYCH · HUMAN DESIGN</p>
+  // Plain, personal-looking letter (11.11.2026): white background, no brand banner. Designed
+  // newsletters are what Gmail sorts into "Promotions"; a simple letter from a person is not.
+  return `<!doctype html><html><body style="margin:0;background:#ffffff;font-family:Helvetica,Arial,sans-serif">
+<div style="max-width:560px;padding:16px">
 ${ps}
-<p style="margin:28px 0 0;font-size:12px;line-height:1.6;color:#5C567F">${escapeHtml(SITE_URL.replace(/^https?:\/\//, ''))}</p>
 </div></body></html>`;
 }
 
@@ -498,6 +504,7 @@ const LETTERS = {
     bye: 'З теплом,<br>Наталі',
     byeText: 'З теплом,\nНаталі',
     why: (site) => `Ти отримуєш цей лист, бо попросив(ла) свій розбір на ${site}.`,
+    ps: 'P.S. Якщо лист потрапив у «Промоакції», перетягни його у «Вхідні». Тоді наступні мої листи приходитимуть туди.',
   },
   ru: {
     subject: 'Твой разбор Human Design уже здесь',
@@ -512,6 +519,7 @@ const LETTERS = {
     bye: 'С теплом,<br>Натали',
     byeText: 'С теплом,\nНатали',
     why: (site) => `Ты получаешь это письмо, потому что запросил(а) свой разбор на ${site}.`,
+    ps: 'P.S. Если письмо попало в «Промоакции», перетащи его во «Входящие». Тогда следующие мои письма будут приходить туда.',
   },
 };
 
@@ -528,9 +536,10 @@ function readingLetter(name, lang = 'en') {
         ...L.lines,
         `${L.more}<br><a href="${home}/#readings" style="color:#765B37">${escapeHtml(homeLabel)}/#readings</a>`,
         L.bye,
+        `<span style="color:#5C567F">${escapeHtml(L.ps)}</span>`,
         `<span style="font-size:12px;color:#5C567F">${escapeHtml(L.why(SITE_URL.replace(/^https?:\/\//, '')))}</span>`,
       ],
-      text: `${L.hi(name)}\n\n${L.lines.join('\n\n')}\n\n${L.more}\n${home}/#readings\n\n${L.byeText}`,
+      text: `${L.hi(name)}\n\n${L.lines.join('\n\n')}\n\n${L.more}\n${home}/#readings\n\n${L.byeText}\n\n${L.ps}`,
     };
   }
   // Copy from the English website brief (09.11.2026). No free-call offer here on purpose.
