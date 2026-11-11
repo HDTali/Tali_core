@@ -108,7 +108,38 @@ function chartFacts(thdData) {
     signature: c.signature || '',
     notSelf: c.notSelfTheme || '',
     cross: c.incarnationCross || '',
+    channels: ((thdData && Array.isArray(thdData.channels) && thdData.channels) || [])
+      .map((ch) => (ch && (ch.id || ch.gates)) || null)
+      .filter(Boolean),
   };
+}
+
+// "55-39" or "39/55" -> "39-55" (gates in ascending order), as in content/hd_terms.*.json.
+function channelKey(id) {
+  const parts = String(id).split(/[-/]/).map((x) => parseInt(x, 10));
+  if (parts.length !== 2 || parts.some(Number.isNaN)) return null;
+  return parts.sort((a, b) => a - b).join('-');
+}
+
+// Channels and the incarnation cross with their descriptions (Ukrainian and Russian only:
+// the English PDF has no texts for them yet). Returns the extra sections for the reading.
+function channelAndCrossSections(facts, lang) {
+  const t = TERMS[lang];
+  const ui = uiFor(lang);
+  if (!t) return [];
+  const out = [];
+  const items = [];
+  for (const id of facts.channels || []) {
+    const key = channelKey(id);
+    const e = key && t.channels[key];
+    if (!e || !e.text) continue;
+    const circuit = e.circuit ? ` (${t.circuitLabel}: ${e.circuit})` : '';
+    items.push({ sub: `${key} · ${e.name}${circuit}`, text: e.text });
+  }
+  if (items.length) out.push({ title: ui.sections.channels, items });
+  const cross = crossEntry(facts.cross, lang);
+  if (cross && cross.text) out.push({ title: ui.sections.cross, items: [{ sub: cross.label, text: cross.text }] });
+  return out;
 }
 
 // Returns { opening, sections: [{ title, items: [text | { sub, text }] }], closing }.
@@ -147,6 +178,7 @@ function composeReading(facts, name, lang = 'en') {
       },
       { title: fill(ui.sections.signature, { x: t.signatureName }), items: [t.signature] },
       { title: fill(ui.sections.notSelf, { x: t.notSelfName }), items: [t.notSelf] },
+      ...channelAndCrossSections(facts, cleanLang(lang)),
     ],
     closingTitle: LIB.closingTitle,
     closing: LIB.closing,
@@ -167,19 +199,20 @@ function officialProfileName(profile, lang = 'en') {
 
 // "Right Angle Cross of Tension (38/39 | 48/21)" -> "Хрест Напруги правого кута (38/39 | 48/21)".
 // Same rule as the site's result page (lib/content/hdTerms.ts). Unknown crosses keep the English name.
-function crossLabel(cross, lang) {
+function crossEntry(cross, lang) {
   const t = TERMS[lang];
-  if (!cross || !t) return cross || '';
+  if (!cross || !t) return cross ? { label: cross, text: null } : null;
   const m = /^(Right Angle|Juxtaposition|Left Angle)\s+Cross\s+of\s+(?:the\s+)?(.+?)\s*(\d*)\s*(\(.*\))?\s*$/i.exec(String(cross).trim());
-  if (!m) return cross;
+  if (!m) return { label: cross, text: null };
   const angle = /^right/i.test(m[1]) ? 'right' : /^left/i.test(m[1]) ? 'left' : 'juxta';
   const theme = m[2].toLowerCase().trim();
   const entry = t.crosses[`${angle}:${theme}`] || t.crosses[theme] || t.crosses[theme.replace(/s$/, '')];
   const name = entry
     ? `${entry.name} ${t.angles[angle]}`
     : `${t.cross} ${t.angles[angle]}: ${theme.replace(/\b\w/g, (c) => c.toUpperCase())}`;
-  return `${name}${m[4] ? ` ${m[4]}` : ''}`;
+  return { label: `${name}${m[4] ? ` ${m[4]}` : ''}`, text: entry ? entry.text : null };
 }
+const crossLabel = (cross, lang) => (crossEntry(cross, lang) || { label: '' }).label;
 
 // The summary table on page 1: chart words in the reader's language.
 function summaryRows(facts, lang) {

@@ -1,0 +1,2 @@
+create table if not exists web_chart_stats (day date not null, lang text not null default 'en', new_charts integer not null default 0, repeat_views integer not null default 0, primary key (day, lang));
+insert into web_chart_stats (day, lang, new_charts, repeat_views) select (created_at at time zone 'Europe/Kyiv')::date, 'old', count(*), sum(hits) - count(*) from web_charts group by 1 on conflict (day, lang) do nothing;

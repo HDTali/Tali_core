@@ -195,6 +195,23 @@ router.get('/places', async (req, res) => {
 });
 
 // ---- POST /web/chart ----
+// ---- Counter of bodygraphs built on the site (11.11.2026) ----
+// One row per day (Kyiv time) and site language. Never blocks the answer: if the table
+// is missing or the database is slow, the chart is still returned and the error is logged.
+function countChart(lang, isNew) {
+  const l = ['en', 'uk', 'ru'].includes(lang) ? lang : 'en';
+  pool
+    .query(
+      `INSERT INTO web_chart_stats (day, lang, new_charts, repeat_views)
+       VALUES ((now() AT TIME ZONE 'Europe/Kyiv')::date, $1, $2, $3)
+       ON CONFLICT (day, lang) DO UPDATE SET
+         new_charts = web_chart_stats.new_charts + EXCLUDED.new_charts,
+         repeat_views = web_chart_stats.repeat_views + EXCLUDED.repeat_views`,
+      [l, isNew ? 1 : 0, isNew ? 0 : 1]
+    )
+    .catch((err) => console.error('[web/stats] count failed:', err.message));
+}
+
 router.post('/chart', async (req, res) => {
   const ip = clientIp(req);
   if (overLimit(`req:${ip}`, REQUESTS_PER_IP_PER_HOUR)) {
@@ -218,6 +235,7 @@ router.post('/chart', async (req, res) => {
       [inputHash]
     );
 
+    const isNew = !cached.rows.length;
     if (cached.rows.length) {
       row = cached.rows[0];
     } else {
@@ -264,6 +282,8 @@ router.post('/chart', async (req, res) => {
       // The chart is still useful without the picture — the site shows a gentle note.
       console.error('[web/chart] bodygraph failed:', err.message);
     }
+
+    countChart(req.body && req.body.lang, isNew);
 
     // How THD understood the place — shown on the site so people can spot a wrong city.
     const bi = (row.thd_data && row.thd_data.birthInfo) || {};
@@ -557,6 +577,72 @@ router.post('/liqpay/callback', express.urlencoded({ extended: false, limit: '64
     console.error('[web/liqpay] callback failed:', err);
     return res.status(500).send('error');
   }
+});
+
+// ---- GET /web/stats?key=... — Nataly's private numbers (11.11.2026) ----
+// The key lives only in Render (WEB_STATS_KEY). Without it the page does not exist (404).
+function sameSecret(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+
+router.get('/stats', async (req, res) => {
+  const key = process.env.WEB_STATS_KEY;
+  if (!key || key.length < 12 || !sameSecret(req.query.key || '', key)) return res.status(404).send('Not found');
+  res.set('Cache-Control', 'no-store');
+  res.set('X-Robots-Tag', 'noindex, nofollow');
+  res.set('Referrer-Policy', 'no-referrer');
+  const q = async (sql) => {
+    try {
+      return (await pool.query(sql)).rows;
+    } catch (err) {
+      console.error('[web/stats]', err.message);
+      return null;
+    }
+  };
+  const today = "(now() AT TIME ZONE 'Europe/Kyiv')::date";
+  const totals = await q(`SELECT
+      coalesce(sum(new_charts + repeat_views), 0)::int AS all_views,
+      coalesce(sum(new_charts), 0)::int AS all_new,
+      coalesce(sum(new_charts + repeat_views) FILTER (WHERE day = ${today}), 0)::int AS today,
+      coalesce(sum(new_charts + repeat_views) FILTER (WHERE day > ${today} - 7), 0)::int AS week,
+      coalesce(sum(new_charts + repeat_views) FILTER (WHERE day > ${today} - 30), 0)::int AS month,
+      min(day) AS since
+    FROM web_chart_stats`);
+  const byLang = await q(`SELECT lang, sum(new_charts + repeat_views)::int AS n, sum(new_charts)::int AS new
+    FROM web_chart_stats GROUP BY lang ORDER BY n DESC`);
+  const byDay = await q(`SELECT to_char(day, 'DD.MM.YYYY') AS day,
+      sum(new_charts + repeat_views)::int AS n, sum(new_charts)::int AS new
+    FROM web_chart_stats WHERE day > ${today} - 30 GROUP BY day ORDER BY day DESC`);
+  const stored = await q(`SELECT count(*)::int AS charts, coalesce(sum(hits), 0)::int AS hits, min(created_at) AS first FROM web_charts`);
+  const pdfs = await q(`SELECT lang, count(*)::int AS n, count(*) FILTER (WHERE status = 'sent')::int AS sent
+    FROM reading_requests GROUP BY lang ORDER BY n DESC`);
+  const orders = await q(`SELECT status, count(*)::int AS n FROM orders GROUP BY status ORDER BY n DESC`);
+
+  const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const LANG = { en: 'EN', uk: 'UA', ru: 'RU', old: 'до 11.11 (язык не записывался)' };
+  const ORDER = { paid: 'оплачено', created: 'не оплачено (ушли со страницы оплаты)', failed: 'ошибка оплаты', refunded: 'возврат' };
+  const fmt = (d) => (d ? new Date(d).toLocaleDateString('ru-RU', { timeZone: 'Europe/Kyiv' }) : '');
+  const t = (totals && totals[0]) || {};
+  const s = (stored && stored[0]) || {};
+  const rows = (list, cells) => (list || []).map((r) => `<tr>${cells(r).map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('');
+  const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Статистика сайта</title>
+<style>body{margin:0;background:#F7F2EA;color:#2A2559;font:16px/1.5 Helvetica,Arial,sans-serif}main{max-width:640px;margin:0 auto;padding:24px 16px}
+h1{font-size:26px;margin:0 0 4px}h2{font-size:18px;margin:28px 0 8px}.muted{color:#5C567F;font-size:14px}
+.big{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:16px}.big div{background:#EFE7DA;border-radius:12px;padding:12px}
+.big b{display:block;font-size:28px}table{width:100%;border-collapse:collapse;font-size:15px}td{padding:6px 4px;border-bottom:1px solid #D9C8AE}</style></head>
+<body><main><h1>Бодиграфы на сайте</h1>
+<p class="muted">Подсчёт идёт с ${esc(fmt(t.since) || 'сегодняшнего дня')}. «Построено» = каждый раз, когда сайт показал бодиграф; «новых» = карты, которых ещё не было в базе.</p>
+${totals ? `<div class="big"><div><b>${t.all_views}</b>построено всего</div><div><b>${t.all_new}</b>новых карт</div><div><b>${t.today}</b>сегодня</div><div><b>${t.week}</b>за 7 дней</div><div><b>${t.month}</b>за 30 дней</div></div>` : '<p>Таблица счётчика ещё не создана (нужен SQL).</p>'}
+<h2>По языкам</h2><table>${rows(byLang, (r) => [LANG[r.lang] || r.lang, `${r.n} построено`, `${r.new} новых`])}</table>
+<h2>По дням (30 дней)</h2><table>${rows(byDay, (r) => [r.day, `${r.n} построено`, `${r.new} новых`])}</table>
+<h2>До начала подсчёта</h2><p class="muted">Сейчас в базе ${esc(s.charts)} карт, их открывали ${esc(s.hits)} раз (самая ранняя от ${esc(fmt(s.first))}). Анонимные карты удаляются через 30 дней, поэтому это не вся история.</p>
+<h2>Бесплатный PDF</h2><table>${rows(pdfs, (r) => [LANG[r.lang] || r.lang, `${r.n} запросов`, `${r.sent} отправлено`])}</table>
+<h2>Заказы</h2><table>${rows(orders, (r) => [ORDER[r.status] || r.status, r.n])}</table>
+</main></body></html>`;
+  res.type('html').send(html);
 });
 
 module.exports = router;
