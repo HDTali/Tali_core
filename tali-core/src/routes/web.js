@@ -615,17 +615,19 @@ router.get('/stats', async (req, res) => {
   const byDay = await q(`SELECT to_char(day, 'DD.MM.YYYY') AS day,
       sum(new_charts + repeat_views)::int AS n, sum(new_charts)::int AS new
     FROM web_chart_stats WHERE day > ${today} - 30 GROUP BY day ORDER BY day DESC`);
-  const stored = await q(`SELECT count(*)::int AS charts, coalesce(sum(hits), 0)::int AS hits, min(created_at) AS first FROM web_charts`);
+  // Everything on the page starts on the counter's first day, so clearing web_chart_stats
+  // (Nataly's "reset", 11.11.2026) also hides the test PDFs and test orders made before it.
+  const since = `coalesce((SELECT min(day) FROM web_chart_stats), ${today})`;
   const pdfs = await q(`SELECT lang, count(*)::int AS n, count(*) FILTER (WHERE status = 'sent')::int AS sent
-    FROM reading_requests GROUP BY lang ORDER BY n DESC`);
-  const orders = await q(`SELECT status, count(*)::int AS n FROM orders GROUP BY status ORDER BY n DESC`);
+    FROM reading_requests WHERE (created_at AT TIME ZONE 'Europe/Kyiv')::date >= ${since} GROUP BY lang ORDER BY n DESC`);
+  const orders = await q(`SELECT status, count(*)::int AS n FROM orders
+    WHERE (created_at AT TIME ZONE 'Europe/Kyiv')::date >= ${since} GROUP BY status ORDER BY n DESC`);
 
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const LANG = { en: 'EN', uk: 'UA', ru: 'RU', old: 'до 11.11 (язык не записывался)' };
   const ORDER = { paid: 'оплачено', created: 'не оплачено (ушли со страницы оплаты)', failed: 'ошибка оплаты', refunded: 'возврат' };
   const fmt = (d) => (d ? new Date(d).toLocaleDateString('ru-RU', { timeZone: 'Europe/Kyiv' }) : '');
   const t = (totals && totals[0]) || {};
-  const s = (stored && stored[0]) || {};
   const rows = (list, cells) => (list || []).map((r) => `<tr>${cells(r).map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('');
   const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><title>Статистика сайта</title>
@@ -638,9 +640,8 @@ h1{font-size:26px;margin:0 0 4px}h2{font-size:18px;margin:28px 0 8px}.muted{colo
 ${totals ? `<div class="big"><div><b>${t.all_views}</b>построено всего</div><div><b>${t.all_new}</b>новых карт</div><div><b>${t.today}</b>сегодня</div><div><b>${t.week}</b>за 7 дней</div><div><b>${t.month}</b>за 30 дней</div></div>` : '<p>Таблица счётчика ещё не создана (нужен SQL).</p>'}
 <h2>По языкам</h2><table>${rows(byLang, (r) => [LANG[r.lang] || r.lang, `${r.n} построено`, `${r.new} новых`])}</table>
 <h2>По дням (30 дней)</h2><table>${rows(byDay, (r) => [r.day, `${r.n} построено`, `${r.new} новых`])}</table>
-<h2>До начала подсчёта</h2><p class="muted">Сейчас в базе ${esc(s.charts)} карт, их открывали ${esc(s.hits)} раз (самая ранняя от ${esc(fmt(s.first))}). Анонимные карты удаляются через 30 дней, поэтому это не вся история.</p>
-<h2>Бесплатный PDF</h2><table>${rows(pdfs, (r) => [LANG[r.lang] || r.lang, `${r.n} запросов`, `${r.sent} отправлено`])}</table>
-<h2>Заказы</h2><table>${rows(orders, (r) => [ORDER[r.status] || r.status, r.n])}</table>
+<h2>Бесплатный PDF</h2><table>${rows(pdfs, (r) => [LANG[r.lang] || r.lang, `${r.n} запросов`, `${r.sent} отправлено`]) || '<tr><td>пока нет</td></tr>'}</table>
+<h2>Заказы</h2><table>${rows(orders, (r) => [ORDER[r.status] || r.status, r.n]) || '<tr><td>пока нет</td></tr>'}</table>
 </main></body></html>`;
   res.type('html').send(html);
 });
