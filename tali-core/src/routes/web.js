@@ -579,6 +579,46 @@ router.post('/liqpay/callback', express.urlencoded({ extended: false, limit: '64
   }
 });
 
+// ---- Likes on blog articles (19.11.2026) ----
+// One shared counter per article (the same slug in RU, UA and EN). No accounts: the site remembers
+// in the visitor's browser that they liked it; here only the total is stored (table article_likes).
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,79}$/;
+const LIKES_PER_IP_PER_HOUR = Number(process.env.WEB_LIKES_PER_IP_PER_HOUR || 30);
+
+router.get('/likes', async (req, res) => {
+  const slug = String(req.query.slug || '');
+  if (!SLUG_RE.test(slug)) return res.status(400).json({ error: 'bad_slug' });
+  res.set('Cache-Control', 'no-store');
+  try {
+    const r = await pool.query('SELECT likes FROM article_likes WHERE slug = $1', [slug]);
+    return res.json({ slug, likes: r.rows.length ? r.rows[0].likes : 0 });
+  } catch (err) {
+    console.error('[web/likes] read failed:', err.message);
+    return res.json({ slug, likes: 0 });
+  }
+});
+
+// Body: { slug, action: 'like' | 'unlike' }
+router.post('/likes', async (req, res) => {
+  const b = req.body || {};
+  const slug = String(b.slug || '');
+  if (!SLUG_RE.test(slug)) return res.status(400).json({ error: 'bad_slug' });
+  if (overLimit(`like:${clientIp(req)}`, LIKES_PER_IP_PER_HOUR)) return res.status(429).json({ error: 'too_many_requests' });
+  const delta = b.action === 'unlike' ? -1 : 1;
+  try {
+    const r = await pool.query(
+      `INSERT INTO article_likes (slug, likes) VALUES ($1, GREATEST($2, 0))
+       ON CONFLICT (slug) DO UPDATE SET likes = GREATEST(article_likes.likes + $2, 0), updated_at = now()
+       RETURNING likes`,
+      [slug, delta]
+    );
+    return res.json({ slug, likes: r.rows[0].likes });
+  } catch (err) {
+    console.error('[web/likes] write failed:', err.message);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
 // ---- GET /web/stats?key=... — Nataly's private numbers (11.11.2026) ----
 // The key lives only in Render (WEB_STATS_KEY). Without it the page does not exist (404).
 function sameSecret(a, b) {
@@ -620,6 +660,7 @@ router.get('/stats', async (req, res) => {
   const since = `coalesce((SELECT min(day) FROM web_chart_stats), ${today})`;
   const pdfs = await q(`SELECT lang, count(*)::int AS n, count(*) FILTER (WHERE status = 'sent')::int AS sent
     FROM reading_requests WHERE (created_at AT TIME ZONE 'Europe/Kyiv')::date >= ${since} GROUP BY lang ORDER BY n DESC`);
+  const likes = await q(`SELECT slug, likes FROM article_likes ORDER BY likes DESC, slug LIMIT 30`);
   const orders = await q(`SELECT status, count(*)::int AS n FROM orders
     WHERE (created_at AT TIME ZONE 'Europe/Kyiv')::date >= ${since} GROUP BY status ORDER BY n DESC`);
 
@@ -641,6 +682,7 @@ ${totals ? `<div class="big"><div><b>${t.all_views}</b>построено все
 <h2>По языкам</h2><table>${rows(byLang, (r) => [LANG[r.lang] || r.lang, `${r.n} построено`, `${r.new} новых`])}</table>
 <h2>По дням (30 дней)</h2><table>${rows(byDay, (r) => [r.day, `${r.n} построено`, `${r.new} новых`])}</table>
 <h2>Бесплатный PDF</h2><table>${rows(pdfs, (r) => [LANG[r.lang] || r.lang, `${r.n} запросов`, `${r.sent} отправлено`]) || '<tr><td>пока нет</td></tr>'}</table>
+<h2>Лайки статей</h2><table>${rows(likes, (r) => [r.slug, `${r.likes} ♥`]) || '<tr><td>пока нет</td></tr>'}</table>
 <h2>Заказы</h2><table>${rows(orders, (r) => [ORDER[r.status] || r.status, r.n]) || '<tr><td>пока нет</td></tr>'}</table>
 </main></body></html>`;
   res.type('html').send(html);
