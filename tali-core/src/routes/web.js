@@ -661,6 +661,10 @@ router.get('/stats', async (req, res) => {
   const pdfs = await q(`SELECT lang, count(*)::int AS n, count(*) FILTER (WHERE status = 'sent')::int AS sent
     FROM reading_requests WHERE (created_at AT TIME ZONE 'Europe/Kyiv')::date >= ${since} GROUP BY lang ORDER BY n DESC`);
   const likes = await q(`SELECT slug, likes FROM article_likes ORDER BY likes DESC, slug LIMIT 30`);
+  // Who asked for the free PDF (newest first), with their consent to news. Only behind the key.
+  const people = await q(`SELECT r.created_at, r.email, r.display_name, r.lang, r.status,
+      EXISTS (SELECT 1 FROM consents c WHERE c.email = r.email AND c.purpose = 'news') AS news
+    FROM reading_requests r ORDER BY r.created_at DESC LIMIT 200`);
   const orders = await q(`SELECT status, count(*)::int AS n FROM orders
     WHERE (created_at AT TIME ZONE 'Europe/Kyiv')::date >= ${since} GROUP BY status ORDER BY n DESC`);
 
@@ -682,6 +686,16 @@ ${totals ? `<div class="big"><div><b>${t.all_views}</b>построено все
 <h2>По языкам</h2><table>${rows(byLang, (r) => [LANG[r.lang] || r.lang, `${r.n} построено`, `${r.new} новых`])}</table>
 <h2>По дням (30 дней)</h2><table>${rows(byDay, (r) => [r.day, `${r.n} построено`, `${r.new} новых`])}</table>
 <h2>Бесплатный PDF</h2><table>${rows(pdfs, (r) => [LANG[r.lang] || r.lang, `${r.n} запросов`, `${r.sent} отправлено`]) || '<tr><td>пока нет</td></tr>'}</table>
+<h2>Кто запросил бесплатный PDF</h2>
+<p class="muted">«Новости: да» = человек согласился получать рассылку. Остальным можно отвечать только по поводу их разбора.</p>
+<div style="overflow-x:auto"><table>${rows(people, (r) => [
+    new Date(r.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Kyiv', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    r.email,
+    r.display_name || '',
+    LANG[r.lang] || r.lang,
+    r.status === 'sent' ? 'отправлено' : r.status === 'failed' ? 'ошибка' : 'в очереди',
+    r.news ? 'новости: да' : 'новости: нет',
+  ]) || '<tr><td>пока нет</td></tr>'}</table></div>
 <h2>Лайки статей</h2><table>${rows(likes, (r) => [r.slug, `${r.likes} ♥`]) || '<tr><td>пока нет</td></tr>'}</table>
 <h2>Заказы</h2><table>${rows(orders, (r) => [ORDER[r.status] || r.status, r.n]) || '<tr><td>пока нет</td></tr>'}</table>
 </main></body></html>`;
