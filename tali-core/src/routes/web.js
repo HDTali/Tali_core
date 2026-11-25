@@ -579,6 +579,58 @@ router.post('/liqpay/callback', express.urlencoded({ extended: false, limit: '64
   }
 });
 
+// ---- POST /web/request: a request to work together (25.11.2026) ----
+// Integration meetings, the "Month together" package and mentoring are agreed in person first,
+// so the site sends a short request instead of a payment. It is emailed to Nataly; nothing is stored.
+const REQUEST_FORMATS = {
+  integration: 'Интеграционная встреча, 60 минут, $70',
+  integration4: 'Пакет из 4 интеграционных встреч, $240',
+  month: 'Месяц вместе: 2 экспертные + 4 интеграционные встречи, $600',
+  mentoring: 'Индивидуальное наставничество, 3–4 месяца, $3000 (знакомство 20 минут)',
+};
+
+router.post('/request', async (req, res) => {
+  const ip = clientIp(req);
+  if (overLimit(`mail:${ip}`, MAIL_FORMS_PER_IP_PER_HOUR)) return res.status(429).json({ error: 'too_many_requests' });
+  const b = req.body || {};
+  if (b.website) return res.json({ ok: true }); // bot trap
+  if (b.consent !== true) return res.status(400).json({ error: 'consent_required' });
+  const name = String(b.name || '').replace(/[\u0000-\u001f<>]/g, ' ').trim().slice(0, 80);
+  const contact = String(b.contact || '').replace(/[\u0000-\u001f<>]/g, ' ').trim().slice(0, 120);
+  const message = String(b.message || '').replace(/[<>]/g, ' ').trim().slice(0, 1500);
+  const format = REQUEST_FORMATS[b.format] ? b.format : null;
+  const lang = ['en', 'uk', 'ru'].includes(b.lang) ? b.lang : 'ru';
+  if (!name || name.length < 2) return res.status(400).json({ error: 'bad_name' });
+  if (!contact || contact.length < 3) return res.status(400).json({ error: 'bad_contact' });
+  if (!format) return res.status(400).json({ error: 'bad_format' });
+  const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  try {
+    await webReading.sendEmail({
+      to: webOrders.ORDERS_NOTIFY_EMAIL,
+      subject: `Заявка с сайта: ${REQUEST_FORMATS[format].split(',')[0]} (${name})`,
+      paragraphs: [
+        '<b>Новая заявка с сайта</b>',
+        `Формат: ${esc(REQUEST_FORMATS[format])}`,
+        `Имя: ${esc(name)}`,
+        `Контакт: ${esc(contact)}`,
+        `Запрос: ${esc(message || '(не написан)').replace(/\n/g, '<br>')}`,
+        `Язык сайта: ${lang.toUpperCase()}. Человек согласился с политикой конфиденциальности.`,
+      ],
+      text: `Новая заявка с сайта
+
+Формат: ${REQUEST_FORMATS[format]}
+Имя: ${name}
+Контакт: ${contact}
+Запрос: ${message || '(не написан)'}
+Язык сайта: ${lang}`,
+    });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[web/request] failed:', err.message);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
 // ---- Likes on blog articles (19.11.2026) ----
 // One shared counter per article (the same slug in RU, UA and EN). No accounts: the site remembers
 // in the visitor's browser that they liked it; here only the total is stored (table article_likes).
