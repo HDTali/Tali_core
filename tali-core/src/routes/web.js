@@ -583,10 +583,10 @@ router.post('/liqpay/callback', express.urlencoded({ extended: false, limit: '64
 // Integration meetings, the "Month together" package and mentoring are agreed in person first,
 // so the site sends a short request instead of a payment. It is emailed to Nataly; nothing is stored.
 const REQUEST_FORMATS = {
-  integration: 'Интеграционная встреча, 60 минут, $70',
-  integration4: 'Пакет из 4 интеграционных встреч, $240',
-  month: 'Месяц вместе: 2 экспертные + 4 интеграционные встречи, $600',
-  mentoring: 'Индивидуальное наставничество, 3–4 месяца, $3000 (знакомство 20 минут)',
+  integration: 'Интеграционная встреча, 60 минут, $69',
+  integration4: 'Пакет из 4 интеграционных встреч, $239',
+  month: 'Познание и практика (месяц вместе): 2 экспертные + 4 интеграционные встречи, $599',
+  mentoring: 'Индивидуальное наставничество, 3–4 месяца, $2999 (знакомство 20 минут)',
 };
 
 router.post('/request', async (req, res) => {
